@@ -186,7 +186,7 @@ void MainWidget::buildUi()
     rootSplitter->addWidget(createRightPropertyPanel());
 
     QList<int> sizes;
-    sizes << 220 << 900 << 280;
+    sizes << 520 << 700 << 280;
     rootSplitter->setSizes(sizes);
 
     layout->addWidget(rootSplitter);
