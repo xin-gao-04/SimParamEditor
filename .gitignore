@@ -1,0 +1,50 @@
+# CMake 构建目录
+build/
+cmake-build-*/
+
+# Visual Studio 文件
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 编译产物
+*.exe
+*.dll
+*.obj
+*.o
+*.a
+*.lib
+*.so
+*.dylib
+
+# Qt moc 生成文件
+*_autogen/
+moc_*.cpp
+mocs_compilation*.cpp
+
+# CMake 缓存文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# IDE 文件
+.vs/
+.vscode/
+.idea/
+*.pro.user
+
+# 临时文件
+*.log
+*.tmp
+*~
+.DS_Store
+Thumbs.db
+
+# Qt 资源编译文件
+qrc_*.cpp
+ui_*.h
+

@@ -1,0 +1,12 @@
+/* 基础样式占位，可后续切换暗/亮主题 */
+QTreeWidget {
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+}
+QPushButton {
+    padding: 6px 12px;
+}
+QScrollArea {
+    background: #FAFAFA;
+}
+
