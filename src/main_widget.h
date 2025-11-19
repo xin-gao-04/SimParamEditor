@@ -162,8 +162,8 @@ private:
 
     void updateThemeToggleButton();
     void updatePropertyPanelVisibility();
+    // 刷新模板字段工作台（Property Browser）：围绕当前选中节点展示叶子字段列表
     void populatePropertyBrowser();
-    void populatePropertyItems(QTreeWidgetItem* parentItem, const ParamMetadata& node, const QString& path);
     void selectPropertyItem(const QString& path);
     void syncEnumEditor();
     void updateEnumButtonsState();

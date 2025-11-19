@@ -8,7 +8,7 @@
 // C++代码生成器
 class CppGenerator {
 public:
-    // 生成所有结构体代码文件
+    // 生成类型定义（结构体 + 枚举），统一写到一个头文件中
     bool generate(const ParamMetadata& root, const QString& outDir);
 
     // 生成实例对象（聚合初始化/变量定义）
@@ -18,7 +18,10 @@ public:
     bool generateInstancesJson(const ParamMetadata& root, const QVector<InstanceMetadata>& instances, const QString& outDir);
 
 private:
-    // 写单个结构体（.h/.cpp）
+    // 写所有类型定义到 Types.h
+    bool writeTypesUnit(const ParamMetadata& root, const QString& outDir);
+
+    // 旧的单结构体输出接口（目前保留但不再使用）
     bool generateStruct(const ParamMetadata& node, const QString& outDir);
 
     // 写实例变量和对应头文件包含

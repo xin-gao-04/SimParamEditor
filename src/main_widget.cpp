@@ -224,6 +224,7 @@ QWidget* MainWidget::createLeftOutline()
     connect(leftTabs, &QTabWidget::currentChanged, this, [this](int idx){
         onInstancesTab = (idx == 1);
         if (onInstancesTab) {
+            // 实例页：显示中间实例编辑器
             refreshInstanceCanvas();
         } else {
             refreshCenterCanvas();
@@ -251,26 +252,33 @@ QWidget* MainWidget::createCenterCanvas()
 {
     centerStack = new QStackedWidget(this);
 
+    // 模板字段工作台：叶子字段列表视图（单层表格，而非树）
     propertyBrowser = new QTreeWidget(centerStack);
-    propertyBrowser->setColumnCount(4);
+    propertyBrowser->setColumnCount(7);
     propertyBrowser->setHeaderLabels(QStringList()
                                      << QString::fromUtf8(u8"名称")
+                                     << QString::fromUtf8(u8"相对路径")
                                      << QString::fromUtf8(u8"类型")
+                                     << QString::fromUtf8(u8"单位")
                                      << QString::fromUtf8(u8"默认值")
-                                     << QString::fromUtf8(u8"说明"));
+                                     << QString::fromUtf8(u8"引用类型")
+                                     << QString::fromUtf8(u8"校验状态"));
     propertyBrowser->setSelectionMode(QAbstractItemView::SingleSelection);
     propertyBrowser->setSelectionBehavior(QAbstractItemView::SelectRows);
     propertyBrowser->setAlternatingRowColors(true);
-    propertyBrowser->setIndentation(20);
-    propertyBrowser->setRootIsDecorated(true);
+    propertyBrowser->setIndentation(0);
+    propertyBrowser->setRootIsDecorated(false);
     propertyBrowser->setUniformRowHeights(true);
     if (auto* header = propertyBrowser->header()) {
         header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         header->setStretchLastSection(true);
-        header->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        header->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        header->setSectionResizeMode(3, QHeaderView::Stretch);
+        header->setSectionResizeMode(0, QHeaderView::ResizeToContents); // 名称
+        header->setSectionResizeMode(1, QHeaderView::Stretch);          // 相对路径
+        header->setSectionResizeMode(2, QHeaderView::ResizeToContents); // 类型
+        header->setSectionResizeMode(3, QHeaderView::ResizeToContents); // 单位
+        header->setSectionResizeMode(4, QHeaderView::ResizeToContents); // 默认值
+        header->setSectionResizeMode(5, QHeaderView::ResizeToContents); // 引用类型
+        header->setSectionResizeMode(6, QHeaderView::Stretch);          // 校验状态/说明
     }
     centerStack->addWidget(propertyBrowser);
 
@@ -418,43 +426,102 @@ void MainWidget::refreshCenterCanvas()
 
 void MainWidget::populatePropertyBrowser()
 {
+    if (!propertyBrowser) return;
     propertyBrowser->clear();
-    const QString rootPath = QString("/") + rootParam.name;
-    QTreeWidgetItem* rootItem = new QTreeWidgetItem(propertyBrowser);
-    rootItem->setText(0, rootParam.name);
-    rootItem->setText(1, QString::fromUtf8(u8"struct"));
-    rootItem->setData(0, Qt::UserRole, rootPath);
-    rootItem->setExpanded(true);
-    populatePropertyItems(rootItem, rootParam, rootPath);
-    propertyBrowser->expandToDepth(2);
-}
 
-void MainWidget::populatePropertyItems(QTreeWidgetItem* parentItem, const ParamMetadata& node, const QString& path)
-{
-    for (const auto& c : node.children) {
-        const QString childPath = path + "/" + c.name;
-        QTreeWidgetItem* item = new QTreeWidgetItem(parentItem);
-        item->setText(0, c.name);
-        item->setText(1, paramTypeToString(c.type));
-        if (c.defaultValue.isValid()) {
-            item->setText(2, c.defaultValue.toString());
-        } else if (c.type == ParamType::CHAR_ARRAY && c.arraySize > 0) {
-            item->setText(2, QString("char[%1]").arg(c.arraySize));
-        } else {
-            item->setText(2, "-");
-        }
-        item->setText(3, c.description);
-        item->setData(0, Qt::UserRole, childPath);
-        if (c.type == ParamType::STRUCT) {
-            const ParamMetadata* childSrc = &c;
-            if (!c.typeName.isEmpty()) {
-                const ParamMetadata* def = TypeManager::instance().getType(c.typeName);
-                if (def) childSrc = def;
+    // 1. 计算校验结果映射（path -> 最严重级别 + 首条消息）
+    QMap<QString, ValidationIssue::Level> levelMap;
+    QMap<QString, QString>                messageMap;
+    {
+        auto report = validateProject(rootParam);
+        for (const auto& issue : report.issues) {
+            const QString& p = issue.path;
+            auto it = levelMap.find(p);
+            if (it == levelMap.end()) {
+                levelMap.insert(p, issue.level);
+                messageMap.insert(p, issue.message);
+            } else {
+                // Error 覆盖 Warning；同级别则保留第一条
+                if (it.value() == ValidationIssue::Warning && issue.level == ValidationIssue::Error) {
+                    it.value() = ValidationIssue::Error;
+                    messageMap[p] = issue.message;
+                }
             }
-            populatePropertyItems(item, *childSrc, childPath);
-            item->setExpanded(true);
         }
     }
+
+    // 2. 确定当前浏览根节点：优先使用 currentPath 对应的 struct，否则用根
+    ParamMetadata* base = nullptr;
+    QString basePath;
+    if (!currentPath.isEmpty() && getParamByPath(currentPath, base) && base && base->type == ParamType::STRUCT) {
+        basePath = currentPath;
+    } else {
+        base = &rootParam;
+        basePath = "/" + rootParam.name;
+    }
+    if (!base) return;
+
+    // 3. 递归收集叶子字段，按行加入 propertyBrowser
+    // 注意：这里不用 std::function，保持对 VS2015 的兼容性
+    struct Local {
+        static void collect(QTreeWidget* view,
+                            const ParamMetadata& node,
+                            const QString& relPath,
+                            const QString& fullPath,
+                            const QMap<QString, ValidationIssue::Level>& levelMap,
+                            const QMap<QString, QString>& messageMap)
+        {
+            const ParamMetadata* src = &node;
+            if (!node.typeName.isEmpty()) {
+                const ParamMetadata* def = TypeManager::instance().getType(node.typeName);
+                if (def) src = def;
+            }
+            for (const auto& c : src->children) {
+                const QString childRel  = relPath.isEmpty() ? c.name : (relPath + "/" + c.name);
+                const QString childFull = fullPath + "/" + c.name;
+                if (c.type == ParamType::STRUCT) {
+                    collect(view, c, childRel, childFull, levelMap, messageMap);
+                } else {
+                    QTreeWidgetItem* item = new QTreeWidgetItem(view);
+                    // 名称
+                    item->setText(0, c.name);
+                    // 相对路径
+                    item->setText(1, childRel);
+                    // 类型
+                    item->setText(2, paramTypeToString(c.type));
+                    // 单位
+                    item->setText(3, c.unit);
+                    // 默认值
+                    if (c.defaultValue.isValid()) {
+                        item->setText(4, c.defaultValue.toString());
+                    } else if (c.type == ParamType::CHAR_ARRAY && c.arraySize > 0) {
+                        item->setText(4, QString("char[%1]").arg(c.arraySize));
+                    } else {
+                        item->setText(4, "-");
+                    }
+                    // 引用类型
+                    item->setText(5, c.typeName.isEmpty() ? "-" : c.typeName);
+
+                    // 校验状态
+                    QString status;
+                    QMap<QString, ValidationIssue::Level>::ConstIterator it = levelMap.find(childFull);
+                    if (it != levelMap.end()) {
+                        const bool isErr = (it.value() == ValidationIssue::Error);
+                        status = isErr ? QString::fromUtf8(u8"[错误] ") : QString::fromUtf8(u8"[警告] ");
+                        status += messageMap.value(childFull);
+                    } else {
+                        status = QString::fromUtf8(u8"通过");
+                    }
+                    item->setText(6, status);
+
+                    // 存储完整路径用于联动左树/表单
+                    item->setData(0, Qt::UserRole, childFull);
+                }
+            }
+        }
+    };
+
+    Local::collect(propertyBrowser, *base, QString(), basePath, levelMap, messageMap);
 }
 
 void MainWidget::selectPropertyItem(const QString& path)
@@ -636,7 +703,9 @@ static void renderFieldsRecursive(QVBoxLayout* layout, const ParamMetadata& type
             QWidget* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0,4,0,4);
             QLabel* name = new QLabel(c.name, row);
             name->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            // 固定标签宽度，保证所有实例编辑行在同一列对齐
             name->setMinimumWidth(180);
+            name->setMaximumWidth(180);
             h->addWidget(name);
             
             QVariant val = inst.values.value(flatKey);
