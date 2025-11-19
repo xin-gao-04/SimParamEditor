@@ -1,12 +1,191 @@
-/* 基础样式占位，可后续切换暗/亮主题 */
-QTreeWidget {
-    background: #FFFFFF;
-    border: 1px solid #E0E0E0;
+/*
+   SimParamEditor Modern UI Stylesheet (Template)
+   Tokens such as @color-primary are replaced at runtime by ThemeManager.
+*/
+
+QWidget {
+    font-family: @font-family-base;
+    font-size: @font-size-base;
+    color: @color-text-primary;
+    background-color: @color-bg-base;
 }
+
+QMainWindow {
+    background-color: @color-bg-base;
+}
+
+QWidget#topBar {
+    background-color: @color-bg-surface;
+    border-bottom: 1px solid @color-border-light;
+}
+
 QPushButton {
-    padding: 6px 12px;
+    background-color: @color-bg-surface;
+    border: 1px solid @color-border-strong;
+    border-radius: @radius-small;
+    padding: 6px 16px;
+    color: @color-text-primary;
 }
+
+QPushButton:hover {
+    background-color: @color-highlight;
+    border-color: @color-primary-hover;
+    color: @color-primary;
+}
+
+QPushButton:pressed {
+    background-color: @color-highlight-strong;
+    border-color: @color-primary-active;
+}
+
+QPushButton[class="primary"] {
+    background-color: @color-primary;
+    border: 1px solid @color-primary;
+    color: #FFFFFF;
+}
+
+QPushButton[class="primary"]:hover {
+    background-color: @color-primary-hover;
+    border-color: @color-primary-hover;
+}
+
+QPushButton[class="ghost"] {
+    background-color: transparent;
+    border-color: transparent;
+    color: @color-text-secondary;
+}
+
+QPushButton[class="ghost"]:hover {
+    background-color: @color-tree-hover;
+    color: @color-primary;
+}
+
+QPushButton[class="ghost"]:pressed {
+    background-color: @color-highlight;
+    color: @color-primary-active;
+}
+
+QTreeWidget {
+    background-color: @color-bg-surface;
+    border: none;
+    outline: none;
+    show-decoration-selected: 1;
+}
+
+QTreeWidget::item {
+    height: 28px;
+    padding: 2px;
+    border: none;
+    color: @color-text-secondary;
+}
+
+QTreeWidget::item:hover {
+    background-color: @color-tree-hover;
+    color: @color-text-primary;
+}
+
+QTreeWidget::item:selected {
+    background-color: @color-tree-selected;
+    color: @color-primary;
+    border-left: 3px solid @color-primary;
+}
+
+QTabWidget::pane {
+    border: 1px solid @color-border-light;
+    background: @color-bg-surface;
+    border-top: none;
+}
+
+QTabBar::tab {
+    background: @color-bg-base;
+    border: 1px solid @color-border-light;
+    border-bottom: none;
+    min-width: 80px;
+    padding: 8px 12px;
+    color: @color-text-secondary;
+}
+
+QTabBar::tab:selected {
+    background: @color-bg-surface;
+    color: @color-primary;
+    border-top: 3px solid @color-primary;
+    font-weight: bold;
+}
+
+QTabBar::tab:hover {
+    color: @color-primary;
+}
+
+QLineEdit,
+QComboBox,
+QSpinBox,
+QDoubleSpinBox,
+QTextEdit {
+    background-color: @color-bg-surface;
+    border: 1px solid @color-border-strong;
+    border-radius: @radius-small;
+    padding: 5px;
+    selection-background-color: @color-primary;
+    color: @color-text-primary;
+}
+
+QLineEdit:focus,
+QComboBox:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QTextEdit:focus {
+    border: 1px solid @color-primary-hover;
+    background-color: @color-bg-surface;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left-width: 0px;
+    border-top-right-radius: @radius-small;
+    border-bottom-right-radius: @radius-small;
+}
+
 QScrollArea {
-    background: #FAFAFA;
+    background-color: transparent;
+    border: none;
+}
+
+QFrame#card {
+    background-color: @color-bg-surface;
+    border: 1px solid @color-border-light;
+    border-radius: @radius-medium;
+    box-shadow: 0px 8px 24px @color-card-shadow;
+}
+
+QLabel#cardTitle {
+    font-weight: bold;
+    font-size: 14px;
+    color: @color-text-primary;
+    padding: 8px 12px;
+    background-color: @color-bg-base;
+    border-top-left-radius: @radius-medium;
+    border-top-right-radius: @radius-medium;
+    border-bottom: 1px solid @color-border-light;
+}
+
+QWidget#propertyPanel {
+    background-color: @color-bg-surface;
+    border-left: 1px solid @color-border-light;
+}
+
+QWidget#statusBar {
+    background-color: @color-bg-surface;
+    border-top: 1px solid @color-border-light;
+    color: @color-text-secondary;
+}
+
+QLabel[class="error"] {
+    color: @color-error;
+}
+
+QLabel[class="warning"] {
+    color: @color-warning;
 }
 

@@ -1,4 +1,5 @@
 #include "cpp_generator.h"
+#include "../type_manager.h"
 
 #include <QDir>
 #include <QSaveFile>
@@ -44,16 +45,22 @@ bool CppGenerator::generate(const ParamMetadata& root, const QString& outDir)
         if (!dir.mkpath(".")) return false;
     }
 
-    // traverse tree: generate for each struct node
     bool ok = true;
-    QList<const ParamMetadata*> stack; stack.append(&root);
-    while (!stack.isEmpty()) {
-        const ParamMetadata* n = stack.takeLast();
-        if (n->type == ParamType::STRUCT) {
-            ok = generateStruct(*n, outDir) && ok;
+    
+    // 1. Generate all registered types
+    QStringList typeNames = TypeManager::instance().getAllTypeNames();
+    for (const QString& tn : typeNames) {
+        const ParamMetadata* meta = TypeManager::instance().getType(tn);
+        if (meta && meta->type == ParamType::STRUCT) {
+            ok = generateStruct(*meta, outDir) && ok;
         }
-        for (const auto& c : n->children) stack.append(&c);
     }
+
+    // 2. Generate Root Config Struct (if it's not just a reference)
+    if (root.type == ParamType::STRUCT && root.typeName.isEmpty()) {
+        ok = generateStruct(root, outDir) && ok;
+    }
+    
     return ok;
 }
 
@@ -75,40 +82,71 @@ static const ParamMetadata* findTypeNodeByPath(const ParamMetadata& root, const 
     if (parts.first() != root.name) return nullptr;
     const ParamMetadata* cur = &root;
     for (int i = 1; i < parts.size(); ++i) {
+        // 如果当前节点是类型引用，先切换到定义
+        if (!cur->typeName.isEmpty()) {
+             const ParamMetadata* def = TypeManager::instance().getType(cur->typeName);
+             if (def) cur = def;
+        }
+        
         bool ok=false;
-        for (const auto& c : cur->children) { if (c.name == parts[i]) { cur = &c; ok=true; break; } }
+        for (const auto& c : cur->children) { 
+            if (c.name == parts[i]) { 
+                cur = &c; 
+                ok=true; 
+                break; 
+            } 
+        }
         if (!ok) return nullptr;
     }
+    
+    // 最终找到节点后，如果是引用，也返回定义
+    if (!cur->typeName.isEmpty()) {
+        const ParamMetadata* def = TypeManager::instance().getType(cur->typeName);
+        if (def) return def;
+    }
+    
     return cur;
 }
 
-QString CppGenerator::renderAggregateInit(const ParamMetadata& typeNode, const InstanceMetadata& inst)
+QString CppGenerator::renderAggregateInit(const ParamMetadata& typeNode, const InstanceMetadata& inst, const QString& prefix)
 {
     QString s("{");
     bool first = true;
-    for (const auto& field : typeNode.children) {
+    
+    // 解析 typeNode (如果是引用)
+    const ParamMetadata* def = &typeNode;
+    if (!typeNode.typeName.isEmpty()) {
+        const ParamMetadata* t = TypeManager::instance().getType(typeNode.typeName);
+        if (t) def = t;
+    }
+    
+    for (const auto& field : def->children) {
         if (!first) s += ", "; first = false;
+        QString currentKey = prefix.isEmpty() ? field.name : (prefix + "/" + field.name);
+
         if (field.type == ParamType::STRUCT) {
-            // find child instance matching this field
-            const InstanceMetadata* childInst = nullptr;
-            for (const auto& ci : inst.children) if (ci.name == field.name) { childInst = &ci; break; }
-            if (childInst) {
-                s += renderAggregateInit(field, *childInst);
-            } else {
-                s += renderAggregateInit(field, InstanceMetadata());
-            }
-        } else if (field.type == ParamType::CHAR_ARRAY && field.arraySize > 0) {
-            const QString v = inst.values.value(field.name).toString();
-            s += "\"" + v + "\"";
-        } else if (field.type == ParamType::ENUM) {
-            const QString v = inst.values.value(field.name).toString();
-            s += v.isEmpty()? QString("0") : v; // 简化：需与枚举定义名一致
-        } else if (field.type == ParamType::FLOAT || field.type == ParamType::DOUBLE) {
-            const QString v = inst.values.value(field.name).toString();
-            s += v.isEmpty()? QString("0.0f") : v;
+            s += renderAggregateInit(field, inst, currentKey);
         } else {
-            const QString v = inst.values.value(field.name).toString();
-            s += v.isEmpty()? QString("0") : v;
+            // Leaf field
+            QVariant val = inst.values.value(currentKey);
+            // fallback to default
+            if (!val.isValid()) val = field.defaultValue;
+            
+            QString vStr = val.toString();
+            
+            if (field.type == ParamType::CHAR_ARRAY && field.arraySize > 0) {
+                s += "\"" + vStr + "\"";
+            } else if (field.type == ParamType::ENUM) {
+                 // 枚举值通常是 INT，如果是字符串名称需要转换？
+                 // 现有逻辑假设 vStr 是数值或者直接可用的字面量
+                 // 如果 val 是字符串且是 enumItem 名，可能需要转为数值或 Enum::Member
+                 // 这里简化：如果值是空的，用0
+                 s += vStr.isEmpty()? QString("0") : vStr; 
+            } else if (field.type == ParamType::FLOAT || field.type == ParamType::DOUBLE) {
+                s += vStr.isEmpty()? QString("0.0f") : vStr;
+            } else {
+                s += vStr.isEmpty()? QString("0") : vStr;
+            }
         }
     }
     s += "}";
@@ -168,8 +206,15 @@ void CppGenerator::renderToJson(QTextStream& out, const ParamMetadata& typeNode,
 {
     const QString ind(indent, ' ');
     out << ind << jsonVar << " = json::object();\n";
-    for (int i = 0; i < typeNode.children.size(); ++i) {
-        const ParamMetadata& c = typeNode.children.at(i);
+    
+    const ParamMetadata* def = &typeNode;
+    if (!typeNode.typeName.isEmpty()) {
+        const ParamMetadata* t = TypeManager::instance().getType(typeNode.typeName);
+        if (t) def = t;
+    }
+
+    for (int i = 0; i < def->children.size(); ++i) {
+        const ParamMetadata& c = def->children.at(i);
         if (c.type == ParamType::STRUCT) {
             out << ind << "{ json child;\n";
             renderToJson(out, c, varName + "." + sanitize(c.name), "child", indent + 2);
@@ -183,8 +228,15 @@ void CppGenerator::renderToJson(QTextStream& out, const ParamMetadata& typeNode,
 void CppGenerator::renderFromJson(QTextStream& out, const ParamMetadata& typeNode, const QString& varName, const QString& jsonVar, int indent)
 {
     const QString ind(indent, ' ');
-    for (int i = 0; i < typeNode.children.size(); ++i) {
-        const ParamMetadata& c = typeNode.children.at(i);
+    
+    const ParamMetadata* def = &typeNode;
+    if (!typeNode.typeName.isEmpty()) {
+        const ParamMetadata* t = TypeManager::instance().getType(typeNode.typeName);
+        if (t) def = t;
+    }
+
+    for (int i = 0; i < def->children.size(); ++i) {
+        const ParamMetadata& c = def->children.at(i);
         if (c.type == ParamType::STRUCT) {
             out << ind << "if(" << jsonVar << ".contains(\"" << sanitize(c.name) << "\")) {\n";
             out << ind << "  const json& child = " << jsonVar << "[\"" << sanitize(c.name) << "\"];\n";
@@ -237,11 +289,26 @@ bool CppGenerator::generateStruct(const ParamMetadata& node, const QString& outD
     hout << "// Auto-generated by SimParamEditor\n";
     hout << "#pragma once\n";
     hout << "#include <cstdint>\n";
-    hout << "#include <QString>\n\n";
+    hout << "#include <QString>\n";
+    
+    // 收集依赖并 include
+    QSet<QString> includes;
+    for (const auto& c : node.children) {
+        if (c.type == ParamType::STRUCT && !c.typeName.isEmpty()) {
+            includes.insert(sanitize(c.typeName));
+        }
+    }
+    for (const QString& inc : includes) {
+        hout << "#include \"" << inc << ".h\"\n";
+    }
+    hout << "\n";
+
     hout << "struct " << structName << " {\n";
     for (const auto& c : node.children) {
         if (c.type == ParamType::STRUCT) {
-            hout << "    " << sanitize(c.name) << " " << sanitize(c.name) << ";\n"; // nested struct as member by name type
+            // 如果使用了 typeName，使用该类型；否则假设是嵌套定义（不推荐但兼容）
+            QString type = c.typeName.isEmpty() ? sanitize(c.name) : sanitize(c.typeName);
+            hout << "    " << type << " " << sanitize(c.name) << ";\n"; 
         } else if (c.type == ParamType::CHAR_ARRAY && c.arraySize > 0) {
             hout << "    char " << sanitize(c.name) << "[" << c.arraySize << "];\n";
         } else {

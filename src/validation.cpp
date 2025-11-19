@@ -1,4 +1,5 @@
 #include "validation.h"
+#include "type_manager.h"
 
 #include <QRegExp>
 #include <QSet>
@@ -17,7 +18,16 @@ static void validateNode(const ParamMetadata& node, const QString& path, Validat
     }
 
     // type specific
-    if (node.type == ParamType::ENUM) {
+    if (!node.typeName.isEmpty()) {
+        if (!TypeManager::instance().hasType(node.typeName)) {
+            out.issues.push_back({ ValidationIssue::Error, path, QString::fromUtf8(u8"引用了不存在的类型: %1").arg(node.typeName) });
+        }
+        // 如果引用有效，通常不需要再次校验引用的定义本身（假设定义时已校验）
+        // 但需要确保本地没有冲突的 children 定义（TypeManager 模式下 children 应为空）
+        if (!node.children.isEmpty()) {
+             out.issues.push_back({ ValidationIssue::Warning, path, QString::fromUtf8(u8"引用类型节点不应包含本地子节点 (将被忽略)") });
+        }
+    } else if (node.type == ParamType::ENUM) {
         if (node.enumItems.isEmpty()) {
             out.issues.push_back({ ValidationIssue::Error, path, QString::fromUtf8(u8"\u679a\u4e3e\u9879\u4e0d\u80fd\u4e3a\u7a7a") });
         }

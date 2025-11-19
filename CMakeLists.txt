@@ -20,6 +20,10 @@ add_executable(SimParamEditor
     src/json_io.h
     src/validation.cpp
     src/validation.h
+    src/ui/theme_manager.cpp
+    src/ui/theme_manager.h
+    src/type_manager.cpp
+    src/type_manager.h
     src/generator/cpp_generator.cpp
     src/generator/cpp_generator.h
     resources/styles/app.qss

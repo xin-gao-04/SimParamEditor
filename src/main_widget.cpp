@@ -1,4 +1,6 @@
 ﻿#include "main_widget.h"
+#include "type_manager.h"
+#include "ui/theme_manager.h"
 
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -7,12 +9,13 @@
 #include <QTreeWidgetItem>
 #include <QTabWidget>
 #include <QScrollArea>
+#include <QStackedWidget>
 #include <QLabel>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QTextEdit>
-#include <QFrame>
 #include <QPushButton>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -22,105 +25,20 @@
 #include <QInputDialog>
 #include <QSpinBox>
 #include <QSizePolicy>
-#include <QEvent>
 #include <QDialog>
-#include <QListWidget>
 #include <QIntValidator>
 #include <QDoubleValidator>
 #include <QDialogButtonBox>
+#include <QHeaderView>
+#include <QTableWidget>
+#include <QSignalBlocker>
+#include <QListWidget>
 #include <limits>
+#include <QApplication>
 
 #include "json_io.h"
 #include "generator/cpp_generator.h"
 #include "validation.h"
-// 简单的枚举编辑对话框
-class EnumEditorDialog : public QDialog {
-public:
-    explicit EnumEditorDialog(const QStringList& items, const QVector<int>& values, QWidget* parent=nullptr)
-        : QDialog(parent), initValues(values)
-    {
-        setWindowTitle(QString::fromUtf8(u8"编辑枚举项"));
-        auto* v = new QVBoxLayout(this);
-        list = new QListWidget(this);
-        for (int i = 0; i < items.size(); ++i) {
-            QListWidgetItem* it = new QListWidgetItem(items.at(i), list);
-            it->setData(Qt::UserRole, i < values.size()? values[i] : QVariant());
-        }
-        v->addWidget(list);
-        auto* row1 = new QHBoxLayout();
-        input = new QLineEdit(this);
-        valueSpin = new QSpinBox(this); valueSpin->setRange(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
-        QPushButton* addBtn = new QPushButton(QString::fromUtf8(u8"添加"), this);
-        QPushButton* updBtn = new QPushButton(QString::fromUtf8(u8"更新"), this);
-        QPushButton* delBtn = new QPushButton(QString::fromUtf8(u8"删除"), this);
-        row1->addWidget(new QLabel(QString::fromUtf8(u8"名称:"), this));
-        row1->addWidget(input);
-        row1->addWidget(new QLabel(QString::fromUtf8(u8"值:"), this));
-        row1->addWidget(valueSpin);
-        row1->addWidget(addBtn);
-        row1->addWidget(updBtn);
-        row1->addWidget(delBtn);
-        v->addLayout(row1);
-        auto* row2 = new QHBoxLayout();
-        QPushButton* autoIncBtn = new QPushButton(QString::fromUtf8(u8"自动递增"), this);
-        row2->addWidget(autoIncBtn);
-        v->addLayout(row2);
-        auto* actionRow = new QHBoxLayout();
-        actionRow->addStretch(1);
-        QPushButton* okBtn = new QPushButton(QString::fromUtf8(u8"确定"), this);
-        QPushButton* cancelBtn = new QPushButton(QString::fromUtf8(u8"取消"), this);
-        actionRow->addWidget(okBtn);
-        actionRow->addWidget(cancelBtn);
-        v->addLayout(actionRow);
-        connect(addBtn, &QPushButton::clicked, this, [this](){
-            const QString name = input->text().trimmed(); if (name.isEmpty()) return;
-            int val = valueSpin->value();
-            auto* it = new QListWidgetItem(name, list); it->setData(Qt::UserRole, val);
-            list->setCurrentItem(it);
-        });
-        connect(updBtn, &QPushButton::clicked, this, [this](){
-            const QString name = input->text().trimmed(); if (name.isEmpty()) return;
-            int val = valueSpin->value();
-            QListWidgetItem* cur = list->currentItem();
-            if (cur) { cur->setText(name); cur->setData(Qt::UserRole, val); }
-        });
-        connect(delBtn, &QPushButton::clicked, this, [this](){ auto* it = list->currentItem(); if (it) delete it; });
-        connect(autoIncBtn, &QPushButton::clicked, this, [this](){ autoIncrementValues(); });
-        connect(list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* it){ if (!it) return; input->setText(it->text()); valueSpin->setValue(it->data(Qt::UserRole).toInt()); });
-        connect(okBtn, &QPushButton::clicked, this, &QDialog::accept);
-        connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
-        setMinimumSize(360, 300);
-    }
-    QStringList resultItems() const {
-        QStringList out;
-        for (int i = 0; i < list->count(); ++i) out << list->item(i)->text().trimmed();
-        out.removeAll("");
-        out.removeDuplicates();
-        return out;
-    }
-    QVector<int> resultValues() const {
-        QVector<int> vals; vals.reserve(list->count());
-        for (int i = 0; i < list->count(); ++i) vals << list->item(i)->data(Qt::UserRole).toInt();
-        return vals;
-    }
-private:
-    QListWidget* list;
-    QLineEdit* input;
-    QSpinBox* valueSpin;
-    QVector<int> initValues;
-    void autoIncrementValues() {
-        if (list->count() == 0) return;
-        // 从第0项开始，用已有的值作为种子；若后项小于等于前项，则设为前项+1
-        int last = list->item(0)->data(Qt::UserRole).toInt();
-        for (int i = 1; i < list->count(); ++i) {
-            int cur = list->item(i)->data(Qt::UserRole).toInt();
-            if (cur <= last) cur = last + 1;
-            list->item(i)->setData(Qt::UserRole, cur);
-            last = cur;
-        }
-    }
-};
-
 // 实例选择对话框（默认全选）
 class InstancesSelectDialog : public QDialog {
 public:
@@ -162,9 +80,13 @@ MainWidget::MainWidget(QWidget* parent)
     : QWidget(parent),
       rootSplitter(nullptr),
       outlineTree(nullptr),
-      canvasContainer(nullptr),
-      canvasScrollArea(nullptr),
-      propertyPanel(nullptr)
+      centerStack(nullptr),
+      propertyBrowser(nullptr),
+      instanceScrollArea(nullptr),
+      instanceContainer(nullptr),
+      instanceLayout(nullptr),
+      propertyPanel(nullptr),
+      themeToggleBtn(nullptr)
 {
     buildUi();
 }
@@ -188,6 +110,7 @@ void MainWidget::buildUi()
     QList<int> sizes;
     sizes << 520 << 700 << 280;
     rootSplitter->setSizes(sizes);
+    lastTemplateSplitterSizes = sizes;
 
     layout->addWidget(rootSplitter);
     layout->addWidget(createStatusBar());
@@ -201,7 +124,6 @@ QWidget* MainWidget::createTopBar()
 {
     auto* bar = new QWidget(this);
     bar->setObjectName("topBar");
-    bar->setStyleSheet("#topBar{background:#FFFFFF; border-bottom:1px solid #E0E0E0;}");
     bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     bar->setFixedHeight(40);
     auto* h = new QHBoxLayout(bar);
@@ -212,6 +134,14 @@ QWidget* MainWidget::createTopBar()
     auto* btnSave = new QPushButton(QString::fromUtf8(u8"\u4FDD\u5B58"), bar);
     auto* btnGen = new QPushButton(QString::fromUtf8(u8"\u751F\u6210\u4EE3\u7801"), bar);
     auto* btnGenInst = new QPushButton(QString::fromUtf8(u8"\u751F\u6210\u5B9E\u4F8B"), bar);
+    themeToggleBtn = new QPushButton(QString::fromUtf8(u8"\u2728 \u4E3B\u9898"), bar);
+
+    btnNew->setProperty("class", "ghost");
+    btnOpen->setProperty("class", "ghost");
+    btnSave->setProperty("class", "ghost");
+    btnGen->setProperty("class", "primary");
+    btnGenInst->setProperty("class", "primary");
+    themeToggleBtn->setProperty("class", "ghost");
     h->addWidget(btnNew);
     h->addWidget(btnOpen);
     h->addWidget(btnSave);
@@ -219,12 +149,14 @@ QWidget* MainWidget::createTopBar()
     h->addWidget(btnGen);
     h->addWidget(btnGenInst);
     h->addStretch(1);
+    h->addWidget(themeToggleBtn);
 
     connect(btnNew, &QPushButton::clicked, this, &MainWidget::onNewProjectClicked);
     connect(btnOpen, &QPushButton::clicked, this, &MainWidget::onOpenClicked);
     connect(btnSave, &QPushButton::clicked, this, &MainWidget::onSaveClicked);
     connect(btnGen, &QPushButton::clicked, this, &MainWidget::onGenerateClicked);
     connect(btnGenInst, &QPushButton::clicked, this, &MainWidget::onGenerateInstancesClicked);
+    connect(themeToggleBtn, &QPushButton::clicked, this, &MainWidget::onThemeToggleClicked);
 
     // 快捷键
     btnNew->setShortcut(QKeySequence("Ctrl+N"));
@@ -239,6 +171,7 @@ QWidget* MainWidget::createTopBar()
     auto* renAct = new QAction(this); renAct->setShortcut(Qt::Key_F2); addAction(renAct);
     connect(renAct, &QAction::triggered, this, &MainWidget::onRenameSelected);
 
+    updateThemeToggleButton();
     return bar;
 }
 
@@ -302,6 +235,7 @@ QWidget* MainWidget::createLeftOutline()
                 if (getParamByPath(path, p)) fillFormFromParam(p);
             }
         }
+        updatePropertyPanelVisibility();
     });
     connect(outlineTree, &QTreeWidget::itemSelectionChanged, this, &MainWidget::onTreeSelectionChanged);
     connect(outlineTree, &QWidget::customContextMenuRequested, this, &MainWidget::onOutlineContextMenuRequested);
@@ -313,62 +247,85 @@ QWidget* MainWidget::createLeftOutline()
     return left;
 }
 
-static QWidget* makeCard(const QString& title, const QList<QPair<QString, QString> >& rows)
-{
-    auto* card = new QFrame;
-    card->setFrameShape(QFrame::StyledPanel);
-    card->setFrameShadow(QFrame::Raised);
-
-    auto* v = new QVBoxLayout(card);
-    v->setContentsMargins(8, 8, 8, 8);
-    v->setSpacing(6);
-
-    auto* header = new QLabel(QString(" %1").arg(title), card);
-    header->setStyleSheet("font-weight:600; background:#F8F9FA; padding:8px; border:1px solid #E0E0E0;");
-    v->addWidget(header);
-
-    for (const auto& p : rows) {
-        auto* row = new QWidget(card);
-        auto* h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 6, 0, 6);
-
-        auto* name = new QLabel(p.first, row);
-        auto* value = new QLabel(p.second, row);
-        value->setStyleSheet("background:#F5F5F5; padding:2px 6px; border-radius:3px; font-family:'Courier New'; color:#666;");
-
-        h->addWidget(name, 0);
-        h->addStretch(1);
-        h->addWidget(value, 0);
-        v->addWidget(row);
-    }
-
-    return card;
-}
-
 QWidget* MainWidget::createCenterCanvas()
 {
-    canvasScrollArea = new QScrollArea(this);
-    canvasScrollArea->setWidgetResizable(true);
+    centerStack = new QStackedWidget(this);
 
-    canvasContainer = new QWidget(canvasScrollArea);
-    auto* v = new QVBoxLayout(canvasContainer);
-    v->setContentsMargins(16, 16, 16, 16);
-    v->setSpacing(12);
-    canvasScrollArea->setWidget(canvasContainer);
-    refreshCenterCanvas();
-    return canvasScrollArea;
+    propertyBrowser = new QTreeWidget(centerStack);
+    propertyBrowser->setColumnCount(4);
+    propertyBrowser->setHeaderLabels(QStringList()
+                                     << QString::fromUtf8(u8"名称")
+                                     << QString::fromUtf8(u8"类型")
+                                     << QString::fromUtf8(u8"默认值")
+                                     << QString::fromUtf8(u8"说明"));
+    propertyBrowser->setSelectionMode(QAbstractItemView::SingleSelection);
+    propertyBrowser->setSelectionBehavior(QAbstractItemView::SelectRows);
+    propertyBrowser->setAlternatingRowColors(true);
+    propertyBrowser->setIndentation(20);
+    propertyBrowser->setRootIsDecorated(true);
+    propertyBrowser->setUniformRowHeights(true);
+    if (auto* header = propertyBrowser->header()) {
+        header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        header->setStretchLastSection(true);
+        header->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(3, QHeaderView::Stretch);
+    }
+    centerStack->addWidget(propertyBrowser);
+
+    connect(propertyBrowser, &QTreeWidget::itemSelectionChanged, this, [this]() {
+        if (suppressPropertySelection) return;
+        if (!outlineTree) return;
+        const auto items = propertyBrowser->selectedItems();
+        if (items.isEmpty()) return;
+        const QString path = items.first()->data(0, Qt::UserRole).toString();
+        if (path.isEmpty()) return;
+        currentPath = path;
+        ParamMetadata* p = nullptr;
+        if (getParamByPath(path, p)) fillFormFromParam(p);
+        suppressTreeSelection = true;
+        QList<QTreeWidgetItem*> all = outlineTree->findItems(QStringLiteral("*"), Qt::MatchWildcard | Qt::MatchRecursive);
+        for (auto* it : all) {
+            if (it->data(0, Qt::UserRole).toString() == path) {
+                outlineTree->setCurrentItem(it);
+                break;
+            }
+        }
+        suppressTreeSelection = false;
+    });
+
+    instanceScrollArea = new QScrollArea(centerStack);
+    instanceScrollArea->setWidgetResizable(true);
+    instanceContainer = new QWidget(instanceScrollArea);
+    instanceLayout = new QVBoxLayout(instanceContainer);
+    instanceLayout->setContentsMargins(16, 16, 16, 16);
+    instanceLayout->setSpacing(12);
+    instanceScrollArea->setWidget(instanceContainer);
+    centerStack->addWidget(instanceScrollArea);
+
+    return centerStack;
 }
 
 QWidget* MainWidget::createRightPropertyPanel()
 {
     propertyPanel = new QWidget(this);
-    // 右侧允许自由拉伸（不再锁死宽度）
+    propertyPanel->setObjectName("propertyPanel"); // QSS hook
+    
     auto* v = new QVBoxLayout(propertyPanel);
-    v->setContentsMargins(12, 12, 12, 12);
+    v->setContentsMargins(16, 16, 16, 16);
+    v->setSpacing(16); // 增加控件间距
+
+    // 标题
+    auto* title = new QLabel(QString::fromUtf8(u8"属性编辑"), propertyPanel);
+    title->setStyleSheet("font-size: 16px; font-weight: bold; color: #333; margin-bottom: 8px;");
+    v->addWidget(title);
 
     auto* form = new QFormLayout;
     form->setLabelAlignment(Qt::AlignLeft);
     form->setFormAlignment(Qt::AlignTop);
+    form->setVerticalSpacing(12); // 表单行间距
+    form->setHorizontalSpacing(12); // Label 和 Field 间距
 
     formNameEdit = new QLineEdit("Temperature", propertyPanel);
     formTypeCombo = new QComboBox(propertyPanel);
@@ -381,12 +338,11 @@ QWidget* MainWidget::createRightPropertyPanel()
     formDefaultEdit = new QLineEdit("25", propertyPanel);
     formDescEdit = new QTextEdit(propertyPanel);
     formDescEdit->setPlainText(QString::fromUtf8(u8"\u73AF\u5883\u6E29\u5EA6\u4F20\u611F\u5668\uFF0C\u6D4B\u91CF\u8303\u56F4 -40\u00B0C \u81F3 85\u00B0C\uFF0C\u7CBE\u5EA6 \u00B10.5\u00B0C"));
-    enumEditBtn = new QPushButton(QString::fromUtf8(u8"\u7F16\u8F91\u679A\u4E3E\u9879"), propertyPanel);
-    enumEditBtn->setVisible(false);
-    connect(enumEditBtn, &QPushButton::clicked, this, &MainWidget::onEditEnumClicked);
     enumDefaultCombo = new QComboBox(propertyPanel);
     enumDefaultCombo->setVisible(false);
-    connect(enumDefaultCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(onInstanceEnumEdited(int)));
+    connect(enumDefaultCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(onEnumDefaultChanged(int)));
+    typeRefCombo = new QComboBox(propertyPanel);
+    typeRefCombo->setVisible(false);
     arraySizeSpin = new QSpinBox(propertyPanel);
     arraySizeSpin->setRange(1, 65535);
     arraySizeSpin->setVisible(false);
@@ -396,11 +352,42 @@ QWidget* MainWidget::createRightPropertyPanel()
     form->addRow(QString::fromUtf8(u8"\u5355\u4F4D"), formUnitEdit);
     form->addRow(QString::fromUtf8(u8"\u9ED8\u8BA4\u503C"), formDefaultEdit);
     form->addRow(QString::fromUtf8(u8"\u53D8\u91CF\u8BF4\u660E"), formDescEdit);
-    form->addRow(QString::fromUtf8(u8"\u679A\u4E3E"), enumEditBtn);
     form->addRow(QString::fromUtf8(u8"\u679A\u4E3E\u9ED8\u8BA4\u503C"), enumDefaultCombo);
+    form->addRow(QString::fromUtf8(u8"\u590D\u7528\u5F15\u7528"), typeRefCombo);
     form->addRow(QString::fromUtf8(u8"char[] \u957F\u5EA6"), arraySizeSpin);
 
     v->addLayout(form);
+
+    enumEditorGroup = new QGroupBox(QString::fromUtf8(u8"\u679A\u4E3E\u9879"), propertyPanel);
+    auto* enumLayout = new QVBoxLayout(enumEditorGroup);
+    enumTable = new QTableWidget(enumEditorGroup);
+    enumTable->setColumnCount(2);
+    enumTable->setHorizontalHeaderLabels(QStringList()
+                                         << QString::fromUtf8(u8"\u540D\u79F0")
+                                         << QString::fromUtf8(u8"\u6570\u503C"));
+    enumTable->horizontalHeader()->setStretchLastSection(true);
+    enumTable->verticalHeader()->setVisible(false);
+    enumTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    enumTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    enumTable->setEditTriggers(QAbstractItemView::AllEditTriggers);
+    enumLayout->addWidget(enumTable);
+    auto* enumButtonsRow = new QHBoxLayout();
+    enumAddRowBtn = new QPushButton(QString::fromUtf8(u8"\u6DFB\u52A0"), enumEditorGroup);
+    enumRemoveRowBtn = new QPushButton(QString::fromUtf8(u8"\u5220\u9664"), enumEditorGroup);
+    enumButtonsRow->addWidget(enumAddRowBtn);
+    enumButtonsRow->addWidget(enumRemoveRowBtn);
+    enumButtonsRow->addStretch(1);
+    enumLayout->addLayout(enumButtonsRow);
+    v->addWidget(enumEditorGroup);
+    enumEditorGroup->setVisible(false);
+    enumTable->setEnabled(false);
+    enumAddRowBtn->setEnabled(false);
+    enumRemoveRowBtn->setEnabled(false);
+
+    connect(enumTable, &QTableWidget::cellChanged, this, &MainWidget::onEnumTableCellChanged);
+    connect(enumTable, &QTableWidget::itemSelectionChanged, this, &MainWidget::updateEnumButtonsState);
+    connect(enumAddRowBtn, &QPushButton::clicked, this, &MainWidget::onEnumAddRowClicked);
+    connect(enumRemoveRowBtn, &QPushButton::clicked, this, &MainWidget::onEnumRemoveRowClicked);
 
     auto* btnRow = new QWidget(propertyPanel);
     auto* hb = new QHBoxLayout(btnRow);
@@ -413,55 +400,209 @@ QWidget* MainWidget::createRightPropertyPanel()
     v->addWidget(btnRow);
     connect(formApplyBtn, &QPushButton::clicked, this, &MainWidget::onApplyFormClicked);
     connect(formCancelBtn, &QPushButton::clicked, this, &MainWidget::onCancelFormClicked);
+    connect(typeRefCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(onTypeRefChanged(int)));
     v->addStretch(1);
 
     return propertyPanel;
 }
 
-QWidget* MainWidget::createParamCard(const ParamMetadata& node)
-{
-    QList<QPair<QString, QString> > rows;
-    for (const auto& c : node.children) {
-        if (c.type == ParamType::STRUCT) {
-            rows << qMakePair(c.name, QString()); // 占位，展开状态在递归渲染时体现
-        } else if (c.type == ParamType::CHAR_ARRAY && c.arraySize > 0) {
-            rows << qMakePair(c.name, QString("char[") + QString::number(c.arraySize) + "]");
-        } else if (isNumericType(c.type)) {
-            rows << qMakePair(c.name, c.defaultValue.isValid()? c.defaultValue.toString() : QString("0"));
-        } else if (c.type == ParamType::ENUM) {
-            rows << qMakePair(c.name, c.defaultValue.isValid()? c.defaultValue.toString() : QString("enum"));
-        } else {
-            rows << qMakePair(c.name, paramTypeToString(c.type));
-        }
-    }
-    QWidget* card = makeCard(node.name, rows);
-    card->setObjectName(QString("card_") + node.name);
-    card->installEventFilter(this);
-    return card;
-}
-
 void MainWidget::refreshCenterCanvas()
 {
-    if (!canvasContainer) return;
-    // clear layout children
-    if (auto* v = qobject_cast<QVBoxLayout*>(canvasContainer->layout())) {
-        QLayoutItem* item;
-        while ((item = v->takeAt(0)) != nullptr) {
-            if (item->widget()) { item->widget()->deleteLater(); }
-            delete item;
-        }
-        for (const auto& c : rootParam.children) {
-            QWidget* top = createParamCard(c);
-            const QString path = QString("/") + rootParam.name + "/" + c.name;
-            top->setProperty("cardFullPath", path);
-            v->addWidget(top);
-            if (expandedSet.contains(path)) {
-                // 展开子结构
-                buildCardsRecursively(v, c, path, 1);
-            }
-        }
-        v->addStretch(1);
+    if (!propertyBrowser || !centerStack) return;
+    centerStack->setCurrentWidget(propertyBrowser);
+    populatePropertyBrowser();
+    if (!currentPath.isEmpty()) {
+        selectPropertyItem(currentPath);
     }
+}
+
+void MainWidget::populatePropertyBrowser()
+{
+    propertyBrowser->clear();
+    const QString rootPath = QString("/") + rootParam.name;
+    QTreeWidgetItem* rootItem = new QTreeWidgetItem(propertyBrowser);
+    rootItem->setText(0, rootParam.name);
+    rootItem->setText(1, QString::fromUtf8(u8"struct"));
+    rootItem->setData(0, Qt::UserRole, rootPath);
+    rootItem->setExpanded(true);
+    populatePropertyItems(rootItem, rootParam, rootPath);
+    propertyBrowser->expandToDepth(2);
+}
+
+void MainWidget::populatePropertyItems(QTreeWidgetItem* parentItem, const ParamMetadata& node, const QString& path)
+{
+    for (const auto& c : node.children) {
+        const QString childPath = path + "/" + c.name;
+        QTreeWidgetItem* item = new QTreeWidgetItem(parentItem);
+        item->setText(0, c.name);
+        item->setText(1, paramTypeToString(c.type));
+        if (c.defaultValue.isValid()) {
+            item->setText(2, c.defaultValue.toString());
+        } else if (c.type == ParamType::CHAR_ARRAY && c.arraySize > 0) {
+            item->setText(2, QString("char[%1]").arg(c.arraySize));
+        } else {
+            item->setText(2, "-");
+        }
+        item->setText(3, c.description);
+        item->setData(0, Qt::UserRole, childPath);
+        if (c.type == ParamType::STRUCT) {
+            const ParamMetadata* childSrc = &c;
+            if (!c.typeName.isEmpty()) {
+                const ParamMetadata* def = TypeManager::instance().getType(c.typeName);
+                if (def) childSrc = def;
+            }
+            populatePropertyItems(item, *childSrc, childPath);
+            item->setExpanded(true);
+        }
+    }
+}
+
+void MainWidget::selectPropertyItem(const QString& path)
+{
+    if (!propertyBrowser) return;
+    suppressPropertySelection = true;
+    QList<QTreeWidgetItem*> queue;
+    for (int i = 0; i < propertyBrowser->topLevelItemCount(); ++i) {
+        queue.append(propertyBrowser->topLevelItem(i));
+    }
+
+    QTreeWidgetItem* target = nullptr;
+    while (!queue.isEmpty()) {
+        QTreeWidgetItem* item = queue.takeFirst();
+        if (item->data(0, Qt::UserRole).toString() == path) {
+            target = item;
+            break;
+        }
+        for (int i = 0; i < item->childCount(); ++i) {
+            queue.append(item->child(i));
+        }
+    }
+
+    if (target) {
+        propertyBrowser->setCurrentItem(target);
+        propertyBrowser->scrollToItem(target, QAbstractItemView::PositionAtCenter);
+    }
+    suppressPropertySelection = false;
+}
+
+void MainWidget::normalizeEnumWorkingValues()
+{
+    while (enumWorkingValues.size() < enumWorkingItems.size()) {
+        int next = enumWorkingValues.isEmpty() ? 0 : enumWorkingValues.last() + 1;
+        enumWorkingValues.append(next);
+    }
+    if (enumWorkingValues.size() > enumWorkingItems.size()) {
+        enumWorkingValues.resize(enumWorkingItems.size());
+    }
+}
+
+void MainWidget::syncEnumEditor()
+{
+    if (!enumTable) return;
+    normalizeEnumWorkingValues();
+    suppressEnumTableSignal = true;
+    enumTable->setRowCount(enumWorkingItems.size());
+    for (int i = 0; i < enumWorkingItems.size(); ++i) {
+        auto* nameItem = new QTableWidgetItem(enumWorkingItems.at(i));
+        enumTable->setItem(i, 0, nameItem);
+        auto* valueItem = new QTableWidgetItem(QString::number(enumWorkingValues.value(i, i)));
+        enumTable->setItem(i, 1, valueItem);
+    }
+    suppressEnumTableSignal = false;
+    updateEnumButtonsState();
+    ensureEnumDefaultValid();
+    refreshEnumDefaultCombo();
+}
+
+void MainWidget::updateEnumButtonsState()
+{
+    const bool editable = enumTable && enumTable->isEnabled();
+    if (enumAddRowBtn) enumAddRowBtn->setEnabled(editable);
+    if (enumRemoveRowBtn) {
+        bool hasSelection = enumTable && enumTable->currentRow() >= 0;
+        enumRemoveRowBtn->setEnabled(editable && hasSelection);
+    }
+}
+
+void MainWidget::refreshEnumDefaultCombo()
+{
+    if (!enumDefaultCombo) return;
+    enumDefaultCombo->clear();
+    for (int i = 0; i < enumWorkingItems.size(); ++i) {
+        const QString name = enumWorkingItems.at(i);
+        const int val = enumWorkingValues.value(i, i);
+        enumDefaultCombo->addItem(QString("%1 (%2)").arg(name).arg(val), name);
+    }
+    const bool hasItems = !enumWorkingItems.isEmpty();
+    enumDefaultCombo->setVisible(hasItems);
+    if (!hasItems) {
+        enumWorkingDefault.clear();
+        return;
+    }
+    int idx = enumDefaultCombo->findData(enumWorkingDefault);
+    if (idx < 0) idx = 0;
+    enumDefaultCombo->setCurrentIndex(idx);
+    enumWorkingDefault = enumDefaultCombo->itemData(idx).toString();
+}
+
+void MainWidget::ensureEnumDefaultValid()
+{
+    if (enumWorkingItems.isEmpty()) {
+        enumWorkingDefault.clear();
+        return;
+    }
+    if (!enumWorkingItems.contains(enumWorkingDefault)) {
+        enumWorkingDefault = enumWorkingItems.first();
+    }
+}
+
+void MainWidget::onEnumTableCellChanged(int row, int column)
+{
+    if (suppressEnumTableSignal) return;
+    if (row < 0 || row >= enumWorkingItems.size()) return;
+    if (column == 0) {
+        QString name = enumTable->item(row, column) ? enumTable->item(row, column)->text().trimmed() : QString();
+        if (name.isEmpty()) name = QString("Item%1").arg(row + 1);
+        enumWorkingItems[row] = name;
+        if (enumWorkingDefault.isEmpty()) enumWorkingDefault = name;
+        refreshEnumDefaultCombo();
+    } else if (column == 1) {
+        bool ok = false;
+        int val = enumTable->item(row, column) ? enumTable->item(row, column)->text().toInt(&ok) : 0;
+        if (!ok) val = enumWorkingValues.value(row, row);
+        enumWorkingValues[row] = val;
+        refreshEnumDefaultCombo();
+    }
+}
+
+void MainWidget::onEnumAddRowClicked()
+{
+    if (!enumTable || !enumTable->isEnabled()) return;
+    QString newName = QString("Item%1").arg(enumWorkingItems.size() + 1);
+    int newValue = enumWorkingValues.isEmpty() ? 0 : enumWorkingValues.last() + 1;
+    enumWorkingItems.append(newName);
+    enumWorkingValues.append(newValue);
+    if (enumWorkingDefault.isEmpty()) enumWorkingDefault = newName;
+    syncEnumEditor();
+    enumTable->setCurrentCell(enumWorkingItems.size() - 1, 0);
+}
+
+void MainWidget::onEnumRemoveRowClicked()
+{
+    if (!enumTable || !enumTable->isEnabled()) return;
+    int row = enumTable->currentRow();
+    if (row < 0 || row >= enumWorkingItems.size()) return;
+    QString removed = enumWorkingItems.at(row);
+    enumWorkingItems.removeAt(row);
+    if (row < enumWorkingValues.size()) enumWorkingValues.removeAt(row);
+    if (enumWorkingDefault == removed) enumWorkingDefault.clear();
+    syncEnumEditor();
+}
+
+void MainWidget::onEnumDefaultChanged(int index)
+{
+    if (!enumDefaultCombo || index < 0) return;
+    enumWorkingDefault = enumDefaultCombo->itemData(index).toString();
 }
 
 bool MainWidget::findInstanceByName(const QString& name, InstanceMetadata*& outInst)
@@ -472,47 +613,69 @@ bool MainWidget::findInstanceByName(const QString& name, InstanceMetadata*& outI
 
 static void renderFieldsRecursive(QVBoxLayout* layout, const ParamMetadata& typeNode, InstanceMetadata& inst, const QStringList& relPath, QObject* receiver)
 {
-    for (const auto& c : typeNode.children) {
+    // 如果 typeNode 本身是引用，需要先解析
+    const ParamMetadata* src = &typeNode;
+    if (!typeNode.typeName.isEmpty()) {
+        const ParamMetadata* typeDef = TypeManager::instance().getType(typeNode.typeName);
+        if (typeDef) src = typeDef;
+    }
+
+    for (const auto& c : src->children) {
         QStringList childPath = relPath; childPath << c.name;
+        const QString flatKey = childPath.join("/");
+        
         if (c.type == ParamType::STRUCT) {
             // group box style
             QWidget* group = new QWidget; auto* v = new QVBoxLayout(group); v->setContentsMargins(8,8,8,8);
             QLabel* title = new QLabel("[" + c.name + "]", group); v->addWidget(title);
-            // find/create child instance node
-            InstanceMetadata* childInst = nullptr;
-            for (auto& ci : inst.children) if (ci.name == c.name) { childInst = &ci; break; }
-            if (!childInst) { InstanceMetadata tmp; tmp.name = c.name; tmp.typePath = inst.typePath + "/" + c.name; inst.children.append(tmp); childInst = &inst.children.last(); }
-            renderFieldsRecursive(v, c, *childInst, childPath, receiver);
+            
+            // 递归：不再查找子实例，直接传递当前实例和更深层的路径
+            renderFieldsRecursive(v, c, inst, childPath, receiver);
             layout->addWidget(group);
         } else {
             QWidget* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0,4,0,4);
-            QLabel* name = new QLabel(c.name, row); h->addWidget(name);
-            const QString relKey = childPath.join("/");
+            QLabel* name = new QLabel(c.name, row);
+            name->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            name->setMinimumWidth(180);
+            h->addWidget(name);
+            
+            QVariant val = inst.values.value(flatKey);
+            // 如果值不存在，尝试使用默认值
+            if (!val.isValid()) val = c.defaultValue;
+
             if (c.type == ParamType::ENUM) {
                 QComboBox* combo = new QComboBox(row);
-                combo->addItems(c.enumItems);
-                combo->setCurrentText(inst.values.value(c.name).toString());
-                combo->setProperty("instRelPath", relKey);
+                
+                // 解析 Enum 定义
+                const ParamMetadata* enumDef = &c;
+                if (!c.typeName.isEmpty()) {
+                     const ParamMetadata* t = TypeManager::instance().getType(c.typeName);
+                     if (t) enumDef = t;
+                }
+
+                combo->addItems(enumDef->enumItems);
+                combo->setCurrentText(val.toString());
+                combo->setProperty("instRelPath", flatKey);
                 QObject::connect(combo, SIGNAL(currentIndexChanged(int)), receiver, SLOT(onInstanceFieldComboChanged(int)));
                 h->addWidget(combo);
             } else if (c.type == ParamType::FLOAT || c.type == ParamType::DOUBLE) {
                 QLineEdit* editor = new QLineEdit(row);
                 editor->setValidator(new QDoubleValidator(editor));
-                editor->setProperty("instRelPath", relKey);
-                editor->setText(inst.values.value(c.name).toString());
+                editor->setProperty("instRelPath", flatKey);
+                editor->setText(val.toString());
                 QObject::connect(editor, SIGNAL(editingFinished()), receiver, SLOT(onInstanceEditorEdited()));
                 h->addWidget(editor);
             } else if (isNumericType(c.type)) {
                 QLineEdit* editor = new QLineEdit(row);
                 editor->setValidator(new QIntValidator(editor));
-                editor->setProperty("instRelPath", relKey);
-                editor->setText(inst.values.value(c.name).toString());
+                editor->setProperty("instRelPath", flatKey);
+                editor->setText(val.toString());
                 QObject::connect(editor, SIGNAL(editingFinished()), receiver, SLOT(onInstanceEditorEdited()));
                 h->addWidget(editor);
             } else {
                 QLineEdit* editor = new QLineEdit(row);
-                editor->setProperty("instRelPath", relKey);
-                editor->setText(inst.values.value(c.name).toString());
+                editor->setProperty("instRelPath", flatKey);
+                editor->setText(val.toString());
                 QObject::connect(editor, SIGNAL(editingFinished()), receiver, SLOT(onInstanceEditorEdited()));
                 h->addWidget(editor);
             }
@@ -535,22 +698,28 @@ QWidget* MainWidget::renderInstanceEditor(const InstanceMetadata& instConst, con
 
 void MainWidget::refreshInstanceCanvas()
 {
-    if (!canvasContainer) return;
+    if (!instanceLayout || !centerStack) return;
     if (leftTabs && leftTabs->currentIndex() != 1) return;
-    // clear
-    if (auto* v = qobject_cast<QVBoxLayout*>(canvasContainer->layout())) {
-        QLayoutItem* item; while ((item = v->takeAt(0)) != nullptr) { if (item->widget()) item->widget()->deleteLater(); delete item; }
-        // pick current instance
+    centerStack->setCurrentWidget(instanceScrollArea);
+
+    QLayoutItem* item;
+    while ((item = instanceLayout->takeAt(0)) != nullptr) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
         QString instName;
-        auto sel = instancesTree->selectedItems(); if (!sel.isEmpty()) instName = sel.first()->text(0); else if (!instances.isEmpty()) instName = instances.first().name;
+    auto sel = instancesTree->selectedItems();
+    if (!sel.isEmpty()) instName = sel.first()->text(0);
+    else if (!instances.isEmpty()) instName = instances.first().name;
         currentInstanceName = instName;
+
         InstanceMetadata* inst = nullptr;
         if (!instName.isEmpty() && findInstanceByName(instName, inst)) {
             const ParamMetadata* tn = findTypeNodeByPath(inst->typePath);
-            if (tn) v->addWidget(renderInstanceEditor(*inst, *tn));
+        if (tn) instanceLayout->addWidget(renderInstanceEditor(*inst, *tn));
         }
-        v->addStretch(1);
-    }
+    instanceLayout->addStretch(1);
 }
 
 void MainWidget::onInstanceEditorEdited()
@@ -559,10 +728,9 @@ void MainWidget::onInstanceEditorEdited()
     QLineEdit* editor = qobject_cast<QLineEdit*>(sender()); if (!editor) return;
     const QString rel = editor->property("instRelPath").toString();
     InstanceMetadata* inst = nullptr; if (!findInstanceByName(currentInstanceName, inst)) return;
-    // set value by leaf name (flat under current struct) — 简化实现：直接按最后一段作为 key
-    QStringList relPath = rel.split('/', QString::SkipEmptyParts);
-    if (relPath.isEmpty()) return;
-    inst->values[relPath.last()] = editor->text();
+    // set value by flat key
+    if (rel.isEmpty()) return;
+    inst->values[rel] = editor->text();
 }
 
 void MainWidget::onInstanceFieldComboChanged(int)
@@ -571,52 +739,51 @@ void MainWidget::onInstanceFieldComboChanged(int)
     QComboBox* combo = qobject_cast<QComboBox*>(sender()); if (!combo) return;
     const QString rel = combo->property("instRelPath").toString();
     InstanceMetadata* inst = nullptr; if (!findInstanceByName(currentInstanceName, inst)) return;
-    QStringList relPath = rel.split('/', QString::SkipEmptyParts);
-    if (relPath.isEmpty()) return;
-    inst->values[relPath.last()] = combo->currentText();
+    if (rel.isEmpty()) return;
+    inst->values[rel] = combo->currentText();
 }
 
-void MainWidget::buildCardsRecursively(QVBoxLayout* layout, const ParamMetadata& node, const QString& path, int depth)
+void MainWidget::updateThemeToggleButton()
 {
-    for (const auto& c : node.children) {
-        if (c.type != ParamType::STRUCT) continue;
-        QWidget* card = createParamCard(c);
-        const QString childPath = path + "/" + c.name;
-        card->setProperty("cardFullPath", childPath);
-        card->setStyleSheet(QString("margin-left:%1px;").arg(depth * 20));
-        layout->addWidget(card);
-        if (expandedSet.contains(childPath)) {
-            buildCardsRecursively(layout, c, childPath, depth + 1);
+    if (!themeToggleBtn) return;
+    const bool isLight = ThemeManager::instance().currentTheme() == ThemeManager::ThemeVariant::Light;
+    themeToggleBtn->setText(isLight ? QString::fromUtf8(u8"🌙 暗色") : QString::fromUtf8(u8"☀️ 亮色"));
+    themeToggleBtn->setToolTip(isLight ? QString::fromUtf8(u8"切换到暗色主题") : QString::fromUtf8(u8"切换到亮色主题"));
+}
+
+void MainWidget::onThemeToggleClicked()
+{
+    ThemeManager::instance().toggleTheme(*qApp);
+    updateThemeToggleButton();
+}
+
+void MainWidget::updatePropertyPanelVisibility()
+{
+    if (!rootSplitter || !propertyPanel) return;
+    if (onInstancesTab) {
+        if (propertyPanel->isVisible()) {
+            auto sizes = rootSplitter->sizes();
+            if (sizes.size() >= 3) {
+                lastTemplateSplitterSizes = sizes;
+                sizes[1] += sizes[2];
+                sizes[2] = 0;
+                rootSplitter->setSizes(sizes);
+            }
+            propertyPanel->setVisible(false);
+        }
+    } else {
+        if (!propertyPanel->isVisible()) {
+            propertyPanel->setVisible(true);
+            if (lastTemplateSplitterSizes.size() >= 3) {
+                rootSplitter->setSizes(lastTemplateSplitterSizes);
+            } else {
+                QList<int> defaults;
+                defaults << 520 << 700 << 280;
+                rootSplitter->setSizes(defaults);
+                lastTemplateSplitterSizes = defaults;
+            }
         }
     }
-}
-
-void MainWidget::updateCardHeaderIndicator(QWidget* card, const QString& name, bool expanded)
-{
-    // 预留接口：如果后续将 header 拆为布局与图标，可在此更新箭头指示。当前卡片文本本身不包含箭头。
-    Q_UNUSED(card); Q_UNUSED(name); Q_UNUSED(expanded);
-}
-
-void MainWidget::renameExpandedPaths(const QString& oldPath, const QString& newPath)
-{
-    QSet<QString> updated;
-    for (const QString& p : expandedSet) {
-        if (p.startsWith(oldPath)) {
-            updated.insert(p);
-        }
-    }
-    for (const QString& p : updated) {
-        expandedSet.remove(p);
-        QString suffix = p.mid(oldPath.size());
-        expandedSet.insert(newPath + suffix);
-    }
-}
-
-void MainWidget::pruneExpandedPaths(const QString& prefixPath)
-{
-    QSet<QString> toRemove;
-    for (const QString& p : expandedSet) if (p.startsWith(prefixPath)) toRemove.insert(p);
-    for (const QString& p : toRemove) expandedSet.remove(p);
 }
 
 const ParamMetadata* MainWidget::findTypeNodeByPath(const QString& path) const
@@ -635,7 +802,12 @@ const ParamMetadata* MainWidget::findTypeNodeByPath(const QString& path) const
 
 static void collectLeafFields(const ParamMetadata& typeNode, QStringList& out)
 {
-    for (const auto& c : typeNode.children) {
+    const ParamMetadata* src = &typeNode;
+    if (!typeNode.typeName.isEmpty()) {
+        const ParamMetadata* def = TypeManager::instance().getType(typeNode.typeName);
+        if (def) src = def;
+    }
+    for (const auto& c : src->children) {
         if (c.type == ParamType::STRUCT) collectLeafFields(c, out);
         else out << c.name;
     }
@@ -660,7 +832,6 @@ QWidget* MainWidget::createStatusBar()
 {
     statusBarWidget = new QWidget(this);
     statusBarWidget->setObjectName("statusBar");
-    statusBarWidget->setStyleSheet("#statusBar{background:#FFFFFF; border-top:1px solid #E0E0E0;}");
     statusBarWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     statusBarWidget->setFixedHeight(30);
     auto* h = new QHBoxLayout(statusBarWidget);
@@ -734,28 +905,59 @@ void MainWidget::fillFormFromParam(const ParamMetadata* p)
 {
     if (!p) return;
     formNameEdit->setText(p->name);
-    formTypeCombo->setCurrentText(paramTypeToString(p->type));
+    const QString typeStr = paramTypeToString(p->type);
+    {
+        QSignalBlocker blocker(formTypeCombo);
+        formTypeCombo->setCurrentText(typeStr);
+    }
     formUnitEdit->setText(p->unit);
     formDefaultEdit->setText(p->defaultValue.isValid()? p->defaultValue.toString() : QString());
     formDescEdit->setPlainText(p->description);
-    const QString t = paramTypeToString(p->type);
-    enumEditBtn->setVisible(t == "enum");
-    arraySizeSpin->setVisible(t == "char[]");
-    if (t == "char[]") arraySizeSpin->setValue(p->arraySize>0? p->arraySize : 1);
-    if (t == "enum") {
-        enumDefaultCombo->clear();
-        // 以 “名称(值)” 显示，并将名称作为 itemData 存储
-        for (int i = 0; i < p->enumItems.size(); ++i) {
-            const QString name = p->enumItems.at(i);
-            const int val = (i < p->enumValues.size()) ? p->enumValues.at(i) : i;
-            enumDefaultCombo->addItem(QString("%1 (%2)").arg(name).arg(val), name);
+    
+    // 更新复用引用列表
+    {
+        QSignalBlocker blocker(typeRefCombo);
+        updateTypeRefCombo(typeStr);
+    }
+
+    arraySizeSpin->setVisible(typeStr == "char[]");
+    if (typeStr == "char[]") arraySizeSpin->setValue(p->arraySize>0? p->arraySize : 1);
+    
+    if (typeRefCombo->isVisible()) {
+        // 尝试选中当前 typeName
+        int idx = -1;
+        if (!p->typeName.isEmpty()) {
+            idx = typeRefCombo->findData(p->typeName);
+        } else if (typeStr == "enum") {
+            // 如果是 Enum 且 typeName 为空，选中 "LOCAL"
+            idx = typeRefCombo->findData("LOCAL");
         }
-        // 选中当前默认值（按名称匹配）
-        int match = -1; for (int i = 0; i < enumDefaultCombo->count(); ++i) if (enumDefaultCombo->itemData(i).toString() == p->defaultValue.toString()) { match = i; break; }
-        enumDefaultCombo->setCurrentIndex(match < 0 ? 0 : match);
-        enumDefaultCombo->setVisible(true);
+        
+        // 如果当前没有选中且是 struct/enum，默认选中第一个 (新建类型)
+        typeRefCombo->setCurrentIndex(idx < 0 ? 0 : idx);
+    }
+    
+    if (typeStr == "enum" && enumEditorGroup) {
+        enumEditorGroup->setVisible(true); // 初始显示，由 onTypeRefChanged 控制启用状态
+        
+        const ParamMetadata* enumSource = p;
+        if (!p->typeName.isEmpty()) {
+            const ParamMetadata* typeDef = TypeManager::instance().getType(p->typeName);
+            if (typeDef) enumSource = typeDef;
+        }
+        enumWorkingItems = enumSource ? enumSource->enumItems : QStringList();
+        enumWorkingValues = enumSource ? enumSource->enumValues : QVector<int>();
+        enumWorkingDefault = p->defaultValue.toString();
+        syncEnumEditor();
+        
+        // 触发一次联动以设置 enabled 状态
+        onTypeRefChanged(typeRefCombo->currentIndex());
     } else {
-        enumDefaultCombo->setVisible(false);
+        if (enumEditorGroup) enumEditorGroup->setVisible(false);
+        enumWorkingItems.clear();
+        enumWorkingValues.clear();
+        enumWorkingDefault.clear();
+        if (enumDefaultCombo) enumDefaultCombo->setVisible(false);
     }
 }
 
@@ -772,19 +974,82 @@ bool MainWidget::applyFormToParam(ParamMetadata* p, QString& error)
     if (!re.exactMatch(name)) { error = QString::fromUtf8(u8"\u540D\u79F0\u4E0D\u5408\u6CD5"); return false; }
 
     p->name = name;
-    {
         ParamType newType = stringToParamType(typeStr);
+    
+    // 类型变更处理
+    if (p->type != newType) {
         p->type = newType;
-        // 若新类型不允许包含子项，清空 children，避免校验报错
-        if (!canHaveChildren(newType) && !p->children.isEmpty()) {
-            p->children.clear();
-        }
+        p->children.clear(); // 类型变了，子项通常要清空
+        p->typeName.clear(); // 类型变了，之前的引用也失效
+        p->enumItems.clear();
+        p->enumValues.clear();
     }
+
     p->unit = unit;
     p->description = desc;
     if (defStr.isEmpty()) p->defaultValue.clear();
     else p->defaultValue = defStr;
     if (typeStr == "char[]") p->arraySize = arraySizeSpin->value();
+    if (p->type == ParamType::ENUM) {
+        ensureEnumDefaultValid();
+        if (!enumWorkingDefault.isEmpty())
+            p->defaultValue = enumWorkingDefault;
+        if (p->typeName.isEmpty()) {
+            normalizeEnumWorkingValues();
+            p->enumItems = enumWorkingItems;
+            p->enumValues = enumWorkingValues;
+        }
+    }
+
+    // 处理 struct/enum 的类型引用
+    if (p->type == ParamType::STRUCT || p->type == ParamType::ENUM) {
+        if (typeRefCombo && typeRefCombo->isVisible()) {
+            QString selData = typeRefCombo->currentData().toString();
+            
+            if (selData == "NEW") {
+                // 用户选择了新建类型，弹出输入框
+                bool ok = false;
+                QString newTypeName = QInputDialog::getText(this, QString::fromUtf8(u8"新建类型"), 
+                                                            QString::fromUtf8(u8"请输入新类型名称(全局唯一):"), QLineEdit::Normal, "", &ok);
+                if (ok && !newTypeName.isEmpty()) {
+                    if (TypeManager::instance().hasType(newTypeName)) {
+                        error = QString::fromUtf8(u8"类型名称已存在");
+                        return false;
+                    }
+                    // 创建新类型定义
+                    ParamMetadata meta;
+                    meta.name = newTypeName;
+                    meta.type = p->type;
+                    // 如果是 enum，保留当前的 enumItems (如果是从非引用状态转过来的)
+                    if (p->type == ParamType::ENUM) {
+                        meta.enumItems = p->enumItems;
+                        meta.enumValues = p->enumValues;
+                    }
+                    
+                    TypeManager::instance().registerType(newTypeName, meta);
+                    selData = newTypeName; // 选中新创建的类型
+                } else {
+                    error = QString::fromUtf8(u8"必须输入类型名称");
+                    return false;
+                }
+            }
+            
+            if (selData == "LOCAL") {
+                 p->typeName.clear(); // 本地定义
+            } else {
+                 p->typeName = selData;
+                 // 清空本地定义，强制使用引用
+                 p->children.clear(); 
+                 if (p->type == ParamType::ENUM) {
+                     p->enumItems.clear();
+                     p->enumValues.clear();
+                 }
+            }
+        }
+    } else {
+        p->typeName.clear();
+    }
+    
     return true;
 }
 
@@ -815,11 +1080,10 @@ void MainWidget::buildSampleRoot()
     InstanceMetadata radar1; radar1.name = "Radar1"; radar1.typePath = "/" + rootParam.name + "/SensorModule";
     radar1.values.insert("Temperature", 25);
     radar1.values.insert("Humidity", 60);
-    InstanceMetadata gpsInst; gpsInst.name = "GPSModule"; gpsInst.typePath = "/" + rootParam.name + "/SensorModule/GPSModule";
-    gpsInst.values.insert("Latitude", QString("39.90f"));
-    gpsInst.values.insert("Longitude", QString("116.40f"));
-    gpsInst.values.insert("Altitude", 50);
-    radar1.children.append(gpsInst);
+    // flat key for nested
+    radar1.values.insert("GPSModule/Latitude", QString("39.90f"));
+    radar1.values.insert("GPSModule/Longitude", QString("116.40f"));
+    radar1.values.insert("GPSModule/Altitude", 50);
     instances.append(radar1);
 
     rebuildTreeFromModel();
@@ -921,6 +1185,7 @@ void MainWidget::onGenerateInstancesClicked()
 
 void MainWidget::onTreeSelectionChanged()
 {
+    if (suppressTreeSelection) return;
     // 根据当前 Tab 选择不同树源
     QTreeWidget* activeTree = onInstancesTab ? instancesTree : outlineTree;
     auto items = activeTree->selectedItems();
@@ -932,21 +1197,7 @@ void MainWidget::onTreeSelectionChanged()
     if (getParamByPath(path, p)) {
         fillFormFromParam(p);
         if (!onInstancesTab) {
-            // 模板页：联动滚动
-            QStringList parts = path.split('/', QString::SkipEmptyParts);
-            if (parts.size() >= 2) {
-                const QString top = parts.at(1);
-                if (auto* v = qobject_cast<QVBoxLayout*>(canvasContainer->layout())) {
-                    for (int i = 0; i < v->count(); ++i) {
-                        QWidget* w = v->itemAt(i)->widget();
-                        if (!w) continue;
-                        if (w->objectName() == QString("card_") + top) {
-                            canvasScrollArea->ensureWidgetVisible(w, 0, 20);
-                            break;
-                        }
-                    }
-                }
-            }
+            selectPropertyItem(path);
         } else {
             // 实例页：刷新实例编辑器
             refreshInstanceCanvas();
@@ -1039,84 +1290,47 @@ void MainWidget::onShowValidationClicked()
     showValidationReportDialog();
 }
 
-bool MainWidget::eventFilter(QObject* watched, QEvent* event)
-{
-    if (event->type() == QEvent::MouseButtonPress) {
-        QWidget* w = qobject_cast<QWidget*>(watched);
-        if (w && w->objectName().startsWith("card_")) {
-            // 优先使用完整路径属性，否则退化为顶层路径
-            QString path = w->property("cardFullPath").toString();
-            if (path.isEmpty()) {
-                const QString top = w->objectName().mid(QString("card_").size());
-                path = QString("/") + rootParam.name + "/" + top;
-            }
-            currentPath = path;
-            // select in tree
-            QList<QTreeWidgetItem*> items = outlineTree->findItems("*", Qt::MatchWildcard | Qt::MatchRecursive);
-            for (auto* it : items) {
-                if (it->data(0, Qt::UserRole).toString() == path) {
-                    outlineTree->setCurrentItem(it);
-                    break;
-                }
-            }
-            ParamMetadata* p = nullptr; if (getParamByPath(path, p)) fillFormFromParam(p);
-            // 切换展开状态：点击 struct 卡片自身时折叠/展开
-            QStringList parts = path.split('/', QString::SkipEmptyParts);
-            if (!parts.isEmpty()) {
-                const QString structPath = path; // 完整路径
-                if (expandedSet.contains(structPath)) expandedSet.remove(structPath);
-                else expandedSet.insert(structPath);
-                refreshCenterCanvas();
-            }
-        }
-    }
-    return QWidget::eventFilter(watched, event);
-}
-
 void MainWidget::onTypeChanged(const QString& typeName)
 {
-    enumEditBtn->setVisible(typeName == "enum");
-    arraySizeSpin->setVisible(typeName == "char[]");
-}
+    const bool isEnum = (typeName == "enum");
+    const bool isStruct = (typeName == "struct");
+    const bool isCharArr = (typeName == "char[]");
+    
+    // 严格互斥显示
+    if (arraySizeSpin) arraySizeSpin->setVisible(isCharArr);
+    
+    // 更新并显示/隐藏 TypeRefCombo
+    updateTypeRefCombo(typeName);
+    
+    // Enum 编辑器组可见性初始控制
+    if (enumEditorGroup) enumEditorGroup->setVisible(isEnum);
 
-void MainWidget::onEditEnumClicked()
-{
-    ParamMetadata* p = nullptr; if (!getParamByPath(currentPath, p)) return;
-    if (!p) return;
-    // 允许在类型下拉已切到 enum 但尚未应用时直接编辑
-    const bool comboIsEnum = (formTypeCombo && formTypeCombo->currentText() == "enum");
-    if (p->type != ParamType::ENUM && !comboIsEnum) return;
-    if (p->type != ParamType::ENUM && comboIsEnum) p->type = ParamType::ENUM;
-    EnumEditorDialog dlg(p->enumItems, p->enumValues, this);
-    if (dlg.exec() != QDialog::Accepted) return;
-    QStringList newItems = dlg.resultItems();
-    p->enumItems = newItems;
-    p->enumValues = dlg.resultValues();
-    // 顺序约束：若未递增则强制递增
-    for (int i = 1; i < p->enumValues.size(); ++i) if (p->enumValues[i] <= p->enumValues[i-1]) p->enumValues[i] = p->enumValues[i-1] + 1;
-    if (!p->defaultValue.isValid() || !p->enumItems.contains(p->defaultValue.toString())) {
-        p->defaultValue = p->enumItems.isEmpty()? QVariant() : QVariant(p->enumItems.first());
+    if (!isEnum) {
+        enumWorkingItems.clear();
+        enumWorkingValues.clear();
+        enumWorkingDefault.clear();
+        refreshEnumDefaultCombo();
+        if (enumTable) enumTable->setRowCount(0);
+    } else {
+        if (enumWorkingItems.isEmpty()) {
+            // 默认占位行
+            enumWorkingItems << QStringLiteral("Item1");
+            enumWorkingValues << 0;
+            enumWorkingDefault = enumWorkingItems.first();
+        }
+        syncEnumEditor();
+        
+        // 触发一次 TypeRef 联动以决定是否启用本地编辑
+        // 默认 updateTypeRefCombo 选中 0 (NEW) 或 user selection
+        // 此时 index 可能是 0
+        if (typeRefCombo) {
+             // 默认选中 LOCAL 如果可用? 不，updateTypeRefCombo 默认不选或选 0
+             // 如果我们希望切换到 Enum 时默认是 Local:
+             int localIdx = typeRefCombo->findData("LOCAL");
+             if (localIdx >= 0) typeRefCombo->setCurrentIndex(localIdx);
+             onTypeRefChanged(typeRefCombo->currentIndex());
+        }
     }
-    // 刷新默认值下拉（名称(值)）
-    enumDefaultCombo->clear();
-    for (int i = 0; i < p->enumItems.size(); ++i) {
-        const QString name = p->enumItems.at(i);
-        const int val = (i < p->enumValues.size()) ? p->enumValues.at(i) : i;
-        enumDefaultCombo->addItem(QString("%1 (%2)").arg(name).arg(val), name);
-    }
-    int match = -1; for (int i = 0; i < enumDefaultCombo->count(); ++i) if (enumDefaultCombo->itemData(i).toString() == p->defaultValue.toString()) { match = i; break; }
-    enumDefaultCombo->setCurrentIndex(match < 0 ? 0 : match);
-    updateValidationStatus();
-    // 刷新实例编辑器（enum 下拉可用）
-    refreshInstanceCanvas();
-}
-
-void MainWidget::onInstanceEnumEdited(int)
-{
-    ParamMetadata* p = nullptr; if (!getParamByPath(currentPath, p)) return;
-    if (!p || p->type != ParamType::ENUM) return;
-    // 取出 itemData（名称）作为实际默认值
-    p->defaultValue = enumDefaultCombo->itemData(enumDefaultCombo->currentIndex()).toString();
 }
 
 void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
@@ -1125,7 +1339,7 @@ void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
     if (!item) return;
     const QString path = item->data(0, Qt::UserRole).toString();
     QMenu menu(this);
-    QAction* actAddStruct = menu.addAction(QString::fromUtf8(u8"\u6DFB\u52A0 struct"));
+    QAction* actAddStruct = nullptr; // 禁止新增本地 struct，统一使用复用
     QAction* actAddField  = menu.addAction(QString::fromUtf8(u8"\u6DFB\u52A0\u5B57\u6BB5"));
     QAction* actRename    = menu.addAction(QString::fromUtf8(u8"\u91CD\u547D\u540D"));
     QAction* actMoveUp    = menu.addAction(QString::fromUtf8(u8"\u4E0A\u79FB"));
@@ -1137,15 +1351,7 @@ void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
     ParamMetadata* p = nullptr;
     if (!getParamByPath(path, p)) return;
 
-    if (chosen == actAddStruct) {
-        if (!canHaveChildren(p->type)) {
-            QMessageBox::warning(this, QString::fromUtf8(u8"\u64CD\u4F5C\u65E0\u6548"), QString::fromUtf8(u8"\u8BE5\u7C7B\u578B\u4E0D\u80FD\u6DFB\u52A0\u5B50\u9879"));
-            return;
-        }
-        ParamMetadata child; child.name = "NewStruct"; child.type = ParamType::STRUCT;
-        p->children.append(child);
-        rebuildTreeFromModel(); updateValidationStatus(); refreshCenterCanvas();
-    } else if (chosen == actAddField) {
+    if (chosen == actAddField) {
         if (!canHaveChildren(p->type)) {
             QMessageBox::warning(this, QString::fromUtf8(u8"\u64CD\u4F5C\u65E0\u6548"), QString::fromUtf8(u8"\u8BE5\u7C7B\u578B\u4E0D\u80FD\u6DFB\u52A0\u5B50\u9879"));
             return;
@@ -1246,11 +1452,6 @@ void MainWidget::onOutlineRowsMoved(const QModelIndex& srcParent, int start, int
     updateValidationStatus();
 }
 
-void MainWidget::onToggleClicked()
-{
-    // 预留：当前使用事件过滤器处理卡片点击展开/折叠
-}
-
 void MainWidget::onDeleteSelected()
 {
     auto items = outlineTree->selectedItems(); if (items.isEmpty()) return;
@@ -1269,7 +1470,7 @@ void MainWidget::onRenameSelected()
     auto items = outlineTree->selectedItems(); if (items.isEmpty()) return;
     const QString path = items.first()->data(0, Qt::UserRole).toString();
     ParamMetadata* p = nullptr; if (!getParamByPath(path, p)) return;
-    bool ok=false; QString newName = QInputDialog::getText(this, QString::fromUtf8(u8"\u91CD\u547D\u540D"), QString::fromUtf8(u8"\u8F93\u5165\u65B0\u540D\u79F0"), QLineEdit::Normal, p->name, &ok);
+    bool ok=false; QString newName = QInputDialog::getText(this, QString::fromUtf8(u8"重命名"), QString::fromUtf8(u8"输入新名称"), QLineEdit::Normal, p->name, &ok);
     if (ok && !newName.isEmpty()) {
         QStringList parts = path.split('/', QString::SkipEmptyParts);
         parts.last() = newName;
@@ -1282,4 +1483,62 @@ void MainWidget::onRenameSelected()
     }
 }
 
+void MainWidget::updateTypeRefCombo(const QString& typeStr)
+{
+    if (!typeRefCombo) return;
+    typeRefCombo->clear();
+    if (typeStr != "struct" && typeStr != "enum") {
+        typeRefCombo->setVisible(false);
+        return;
+    }
+    typeRefCombo->setVisible(true);
 
+    // 1. 选项: 新建类型
+    typeRefCombo->addItem(QString::fromUtf8(u8"<新建类型...>"), QString("NEW"));
+
+    // 2. 选项: 本地定义 (仅枚举可用，Struct 强制复用或新建)
+    if (typeStr == "enum") {
+        typeRefCombo->addItem(QString::fromUtf8(u8"<本地定义>"), QString("LOCAL"));
+    }
+
+    // 3. 列出 TypeManager 中的现有类型
+    ParamType targetType = (typeStr == "struct" ? ParamType::STRUCT : ParamType::ENUM);
+    QStringList types = TypeManager::instance().getTypeNames(targetType);
+    for (const QString& tn : types) {
+        typeRefCombo->addItem(tn, tn);
+    }
+}
+
+void MainWidget::onTypeRefChanged(int index)
+{
+    if (index < 0 || !typeRefCombo) return;
+    QString data = typeRefCombo->itemData(index).toString();
+    const bool isLocal = (data == "LOCAL");
+    const bool isEnum = (formTypeCombo && formTypeCombo->currentText() == "enum");
+    
+    // 仅当是 Enum 且选择了本地定义时，启用枚举编辑器
+    if (isEnum) {
+        // 如果是 NEW，暂时认为是引用/新建流程，不启用本地编辑器
+        // 如果是具体引用，也不启用
+        bool enableEditor = isLocal;
+
+        if (enumEditorGroup) enumEditorGroup->setVisible(enableEditor || !isLocal);
+        
+        if (enumTable) {
+            enumTable->setEnabled(enableEditor);
+            enumTable->setEditTriggers(enableEditor ? QAbstractItemView::AllEditTriggers : QAbstractItemView::NoEditTriggers);
+        }
+        if (enumAddRowBtn) enumAddRowBtn->setEnabled(enableEditor);
+        if (enumRemoveRowBtn) enumRemoveRowBtn->setEnabled(enableEditor && enumTable && enumTable->currentRow() >= 0);
+        
+        // 如果选择了引用类型，尝试填充预览数据
+        if (!isLocal && data != "NEW" && data != "LOCAL") {
+             const ParamMetadata* typeDef = TypeManager::instance().getType(data);
+             if (typeDef) {
+                 enumWorkingItems = typeDef->enumItems;
+                 enumWorkingValues = typeDef->enumValues;
+                 syncEnumEditor();
+             }
+        }
+    }
+}

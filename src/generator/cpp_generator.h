@@ -25,7 +25,7 @@ private:
     bool writeInstancesUnit(const ParamMetadata& root, const QVector<InstanceMetadata>& instances, const QString& outDir);
 
     // 渲染C++聚合初始化（如 {1, 2, {...}} ）
-    QString renderAggregateInit(const ParamMetadata& typeNode, const InstanceMetadata& inst);
+    QString renderAggregateInit(const ParamMetadata& typeNode, const InstanceMetadata& inst, const QString& prefix = "");
 
     // 写Json相关代码
     bool writeInstancesJsonUnit(const ParamMetadata& root, const QVector<InstanceMetadata>& instances, const QString& outDir);

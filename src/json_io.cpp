@@ -17,6 +17,10 @@ static QJsonObject paramToJson(const ParamMetadata& p)
     if (!p.enumItems.isEmpty()) {
         QJsonArray arr; for (const auto& it : p.enumItems) arr.append(it); o["enumItems"] = arr;
     }
+    if (!p.enumValues.isEmpty()) {
+        QJsonArray arr; for (int v : p.enumValues) arr.append(v); o["enumValues"] = arr;
+    }
+    if (!p.typeName.isEmpty()) o["typeName"] = p.typeName;
     if (p.arraySize > 0) o["arraySize"] = p.arraySize;
     if (!p.children.isEmpty()) {
         QJsonArray arr;
@@ -35,8 +39,12 @@ static ParamMetadata jsonToParam(const QJsonObject& o)
     p.defaultValue = o.value("default").toVariant();
     p.description = o.value("description").toString();
     p.arraySize = o.value("arraySize").toInt(0);
+    p.typeName = o.value("typeName").toString();
     if (o.contains("enumItems")) {
         for (const auto& v : o.value("enumItems").toArray()) p.enumItems.append(v.toString());
+    }
+    if (o.contains("enumValues")) {
+        for (const auto& v : o.value("enumValues").toArray()) p.enumValues.append(v.toInt());
     }
     if (o.contains("children")) {
         for (const auto& v : o.value("children").toArray()) p.children.append(jsonToParam(v.toObject()));
@@ -75,30 +83,44 @@ bool SpeIO::loadProject(const QString& path, ParamMetadata& root)
     return true;
 }
 
-// 实例序列化（简化）：仅输出 name/typePath/values（children 简单递归）
+// 实例序列化（简化）：仅输出 name/typePath/values
 static QJsonObject instanceToJson(const InstanceMetadata& in)
 {
     QJsonObject o; o["name"] = in.name; o["typePath"] = in.typePath;
     if (!in.values.isEmpty()) {
-        QJsonObject vo; for (auto it = in.values.constBegin(); it != in.values.constEnd(); ++it) vo[it.key()] = QJsonValue::fromVariant(it.value());
+        QJsonObject vo; 
+        for (auto it = in.values.constBegin(); it != in.values.constEnd(); ++it) {
+            vo[it.key()] = QJsonValue::fromVariant(it.value());
+        }
         o["values"] = vo;
     }
-    if (!in.children.isEmpty()) {
-        QJsonArray arr; for (const auto& c: in.children) arr.append(instanceToJson(c)); o["children"] = arr;
-    }
     return o;
+}
+
+static void flattenInstanceChildren(const QJsonObject& o, QMap<QString, QVariant>& outValues, const QString& prefix)
+{
+    if (o.contains("values")) {
+        const auto vo = o.value("values").toObject();
+        for (auto it = vo.begin(); it != vo.end(); ++it) {
+             outValues[prefix + it.key()] = it.value().toVariant();
+        }
+    }
+    if (o.contains("children")) {
+        for (const auto& v : o.value("children").toArray()) {
+            QJsonObject childObj = v.toObject();
+            QString childName = childObj.value("name").toString();
+            flattenInstanceChildren(childObj, outValues, prefix + childName + "/");
+        }
+    }
 }
 
 static InstanceMetadata jsonToInstance(const QJsonObject& o)
 {
     InstanceMetadata in; in.name = o.value("name").toString(); in.typePath = o.value("typePath").toString();
-    if (o.contains("values")) {
-        const auto vo = o.value("values").toObject();
-        for (auto it = vo.begin(); it != vo.end(); ++it) in.values[it.key()] = it.value().toVariant();
-    }
-    if (o.contains("children")) {
-        for (const auto& v : o.value("children").toArray()) in.children.append(jsonToInstance(v.toObject()));
-    }
+    
+    // 支持新旧格式：扁平化读取
+    flattenInstanceChildren(o, in.values, "");
+    
     return in;
 }
 

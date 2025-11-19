@@ -22,6 +22,11 @@ struct ParamMetadata {
     QVariant defaultValue;
     QString description;
     QVector<ParamMetadata> children;
+    
+    // 新增：引用类型名称 (Type Registry Key)。
+    // 如果设置了此字段，表示该节点是某个已注册类型的实例。
+    // 此时 children/enumItems 应为空，具体结构由 TypeManager 中的定义决定。
+    QString typeName;
 
     // enum
     QStringList enumItems;
@@ -34,8 +39,13 @@ struct ParamMetadata {
 struct InstanceMetadata {
     QString name;                  // 实例名称，如 Radar1
     QString typePath;              // 指向模板结构的路径，如 /PayloadConfig/SensorModule
-    QMap<QString, QVariant> values;// 叶子字段名 -> 值（同级内唯一，嵌套通过 children 表达）
-    QVector<InstanceMetadata> children; // 嵌套实例（用于 struct 内嵌 struct）
+    
+    // 扁平化存储所有叶子节点的值
+    // Key: 相对路径 (e.g. "Temperature", "GPS/Latitude")
+    // Value: 具体值
+    QMap<QString, QVariant> values;
+    
+    // 已移除递归 children，改为 Diff 模式
 };
 
 inline QString paramTypeToString(ParamType t)

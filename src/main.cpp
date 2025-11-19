@@ -1,9 +1,11 @@
 #include <QApplication>
 #include "main_widget.h"
+#include "ui/theme_manager.h"
 
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
+    ThemeManager::instance().applyTheme(app, ThemeManager::ThemeVariant::Light);
 
     MainWidget w;
     w.setWindowTitle("SimParamEditor");

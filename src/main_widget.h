@@ -1,8 +1,9 @@
 #ifndef MAIN_WIDGET_H
 #define MAIN_WIDGET_H
 
-#include <QSet>
+#include <QList>
 #include <QWidget>
+#include <QStringList>
 #include "param_types.h"
 
 class QPushButton;
@@ -29,6 +30,11 @@ class QPushButton;
 class QSpinBox;
 class QDoubleSpinBox;
 class QTabWidget;
+class QStackedWidget;
+class QGroupBox;
+class QTableWidget;
+class QGroupBox;
+class QListWidget;
 
 // 主窗口类，负责UI的整体组织与核心逻辑，包括参数模板与实例的管理与编辑
 class MainWidget : public QWidget
@@ -52,24 +58,10 @@ private:
     // 创建底部状态栏
     QWidget* createStatusBar();
 
-    // 刷新参数（模板）编辑区
+    // 刷新参数（模板）视图
     void refreshCenterCanvas();
     // 刷新实例编辑区
     void refreshInstanceCanvas();
-
-    // 创建参数卡片（显示参数简要信息）
-    QWidget* createParamCard(const ParamMetadata& node);
-
-    // 递归地构建参数（结构体）卡片
-    void buildCardsRecursively(QVBoxLayout* layout, const ParamMetadata& node, const QString& path, int depth);
-
-    // 更新卡片头部指示（比如展开/收起小箭头）
-    void updateCardHeaderIndicator(QWidget* card, const QString& name, bool expanded);
-
-    // 更改展开路径（用于重命名结构体时更新UI状态）
-    void renameExpandedPaths(const QString& oldPath, const QString& newPath);
-    // 修剪已展开的路径（删除某一前缀下的展开项）
-    void pruneExpandedPaths(const QString& prefixPath);
 
     // 根据路径获取参数类型节点
     const ParamMetadata* findTypeNodeByPath(const QString& path) const;
@@ -96,7 +88,7 @@ private:
 
     // 将参数信息填写到表单控件
     void fillFormFromParam(const ParamMetadata* p);
-    // 应用表单内容到参数对象，error用于输出错误信息
+    // 应用表单内容事件
     bool applyFormToParam(ParamMetadata* p, QString& error);
     // 更新参数校验状态
     void updateValidationStatus();
@@ -105,8 +97,6 @@ private:
     // 恢复上次树的选择
     void restoreTreeSelection();
 
-    // 事件过滤（如用于自定义行为、快捷键）
-    bool eventFilter(QObject* watched, QEvent* event) override;
     // 构建示例根节点
     void buildSampleRoot();
     // 重建实例树
@@ -121,16 +111,20 @@ private:
     QTreeWidget* outlineTree;
     // 实例页树（实例结构树）
     QTreeWidget* instancesTree;
-    // 中间主展示区容器
-    QWidget* canvasContainer;
-    // 滚动区域
-    QScrollArea* canvasScrollArea;
+    // 中间主展示区
+    QStackedWidget* centerStack;
+    QTreeWidget* propertyBrowser;
+    QScrollArea* instanceScrollArea;
+    QWidget* instanceContainer;
+    QVBoxLayout* instanceLayout;
     // 右侧属性面板
     QWidget* propertyPanel;
     // 状态栏部件
     QWidget* statusBarWidget;
     // 状态显示标签
     QLabel* statusLabel;
+    QPushButton* themeToggleBtn;
+    QList<int> lastTemplateSplitterSizes;
 
     // 参数模板根节点数据
     ParamMetadata rootParam;
@@ -153,11 +147,30 @@ private:
     QTextEdit* formDescEdit;          // 变量说明
     QPushButton* formApplyBtn;        // 应用按钮
     QPushButton* formCancelBtn;       // 取消按钮
-    QPushButton* enumEditBtn;         // 枚举编辑按钮
     QSpinBox* arraySizeSpin;          // char[]长度
     QComboBox* enumDefaultCombo;      // 枚举默认值下拉
-    QSet<QString> expandedSet;        // UI已展开路径集合
+    QComboBox* typeRefCombo;          // 结构/枚举的复用引用下拉
+    QGroupBox* enumEditorGroup;
+    QTableWidget* enumTable;
+    QPushButton* enumAddRowBtn;
+    QPushButton* enumRemoveRowBtn;
+    QStringList enumWorkingItems;
+    QVector<int> enumWorkingValues;
+    QString enumWorkingDefault;
+    bool suppressEnumTableSignal = false;
     QVector<InstanceMetadata> instances; // 当前项目的所有实例
+
+    void updateThemeToggleButton();
+    void updatePropertyPanelVisibility();
+    void populatePropertyBrowser();
+    void populatePropertyItems(QTreeWidgetItem* parentItem, const ParamMetadata& node, const QString& path);
+    void selectPropertyItem(const QString& path);
+    void syncEnumEditor();
+    void updateEnumButtonsState();
+    void refreshEnumDefaultCombo();
+    void ensureEnumDefaultValid();
+    void normalizeEnumWorkingValues();
+    void updateTypeRefCombo(const QString& typeStr);
 
 private slots:
     // 新建项目
@@ -184,24 +197,26 @@ private slots:
     void onShowValidationClicked();
     // 类型下拉框变化
     void onTypeChanged(const QString& typeName);
-    // 编辑枚举项按钮被点击
-    void onEditEnumClicked();
     // 树节点拖动（移动）处理
     void onOutlineRowsMoved(const QModelIndex& srcParent, int start, int end, const QModelIndex& dstParent, int dstRow);
-    // 卡片折叠/展开按钮点击
-    void onToggleClicked();
     // 删除选中参数
     void onDeleteSelected();
     // 重命名参数
     void onRenameSelected();
     // 实例编辑表单内容变化
     void onInstanceEditorEdited();
-    // 更改实例枚举值
-    void onInstanceEnumEdited(int);
     // 实例字段下拉变化
     void onInstanceFieldComboChanged(int);
+    void onThemeToggleClicked();
+    void onEnumTableCellChanged(int row, int column);
+    void onEnumAddRowClicked();
+    void onEnumRemoveRowClicked();
+    void onEnumDefaultChanged(int);
+    void onTypeRefChanged(int index);
+
+private:
+    bool suppressTreeSelection = false;
+    bool suppressPropertySelection = false;
 };
 
 #endif // MAIN_WIDGET_H
-
-
