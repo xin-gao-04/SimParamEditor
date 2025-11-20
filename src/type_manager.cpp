@@ -35,7 +35,15 @@ const ParamMetadata* TypeManager::getType(const QString& name) const {
     if (!m_types.contains(name)) {
         return nullptr;
     }
-    return &m_types[name];
+    auto it = m_types.constFind(name);
+    if (it == m_types.constEnd()) {
+        return nullptr;
+    }
+    const ParamMetadata* result = &it.value();
+    if (!result->typeName.isEmpty()) {
+        return getType(result->typeName);
+    }
+    return result;
 }
 
 bool TypeManager::hasType(const QString& name) const {
