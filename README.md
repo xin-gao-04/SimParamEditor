@@ -567,6 +567,7 @@ app.setStyleSheet(R"(
     - 引入 `TypeManager` 单例，统一管理 Struct/Enum 类型。
     - UI 支持新建/引用全局类型，解决了“匿名 Struct”导致的悬空引用风险。
     - 更新了 `MainWidget` 的表单逻辑，在切换类型为 Struct/Enum 时必须指定 `typeName`。
+    - `.spe` 项目文件新增 `types` 节点，保存 `TypeManager` 注册的所有类型，打开项目时自动还原类型库，彻底杜绝“重启后引用丢失”。
 
 2. **实例数据模型重构 (Instance Model Refactoring)**
     - `InstanceMetadata` 移除了递归的 `children` 结构。

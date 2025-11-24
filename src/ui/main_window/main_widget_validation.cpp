@@ -14,9 +14,9 @@ void MainWidget::updateValidationStatus()
         if (i.level == ValidationIssue::Error) ++errors;
         else ++warns;
     }
-    statusLabel->setText(QString::fromUtf8(u8"\u6821\u9A8C\u72B6\u6001: ") +
-                         (errors == 0 ? QString::fromUtf8(u8"\u901A\u8FC7") : QString::fromUtf8(u8"\u9519\u8BEF ") + QString::number(errors)) +
-                         QString::fromUtf8(u8"  \u8B66\u544A: ") + QString::number(warns));
+    statusLabel->setText(QStringLiteral("校验状态: ") +
+                         (errors == 0 ? QStringLiteral("通过") : QStringLiteral("错误 ") + QString::number(errors)) +
+                         QStringLiteral("  警告: ") + QString::number(warns));
 }
 
 void MainWidget::showValidationReportDialog()
@@ -24,10 +24,10 @@ void MainWidget::showValidationReportDialog()
     auto report = validateProject(rootParam);
     QString text;
     for (const auto& i : report.issues) {
-        text += (i.level == ValidationIssue::Error ? QString::fromUtf8(u8"[\u9519\u8BEF] ") : QString::fromUtf8(u8"[\u8B66\u544A] ")) + i.path + " - " + i.message + "\n";
+        text += (i.level == ValidationIssue::Error ? QStringLiteral("[错误] ") : QStringLiteral("[警告] ")) + i.path + " - " + i.message + "\n";
     }
-    if (text.isEmpty()) text = QString::fromUtf8(u8"\u65E0\u95EE\u9898");
-    QMessageBox::information(this, QString::fromUtf8(u8"\u6821\u9A8C\u62A5\u544A"), text);
+    if (text.isEmpty()) text = QStringLiteral("无问题");
+    QMessageBox::information(this, QStringLiteral("校验报告"), text);
 }
 
 void MainWidget::onShowValidationClicked()

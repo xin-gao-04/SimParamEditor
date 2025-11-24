@@ -101,10 +101,10 @@ void MainWidget::populatePropertyBrowser()
                     auto it = levelMap.find(childFull);
                     if (it != levelMap.end()) {
                         const bool isErr = (it.value() == ValidationIssue::Error);
-                        status = isErr ? QString::fromUtf8(u8"[错误] ") : QString::fromUtf8(u8"[警告] ");
+                        status = isErr ? QStringLiteral("[错误] ") : QStringLiteral("[警告] ");
                         status += messageMap.value(childFull);
                     } else {
-                        status = QString::fromUtf8(u8"通过");
+                        status = QStringLiteral("通过");
                     }
                     item->setText(6, status);
                     item->setData(0, Qt::UserRole, childFull);
@@ -329,7 +329,7 @@ bool MainWidget::applyFormToParam(ParamMetadata* p, QString& error)
 
     static QRegExp re("^[A-Za-z_][A-Za-z0-9_]*$");
     if (!re.exactMatch(name)) {
-        error = QString::fromUtf8(u8"\u540D\u79F0\u4E0D\u5408\u6CD5");
+        error = QStringLiteral("名称不合法");
         return false;
     }
 
@@ -365,11 +365,11 @@ bool MainWidget::applyFormToParam(ParamMetadata* p, QString& error)
 
             if (selData == "NEW") {
                 bool ok = false;
-                QString newTypeName = QInputDialog::getText(this, QString::fromUtf8(u8"新建类型"),
-                                                            QString::fromUtf8(u8"请输入新类型名称(全局唯一):"), QLineEdit::Normal, "", &ok);
+                QString newTypeName = QInputDialog::getText(this, QStringLiteral("新建类型"),
+                                                            QStringLiteral("请输入新类型名称(全局唯一):"), QLineEdit::Normal, "", &ok);
                 if (ok && !newTypeName.isEmpty()) {
                     if (TypeManager::instance().hasType(newTypeName)) {
-                        error = QString::fromUtf8(u8"类型名称已存在");
+                        error = QStringLiteral("类型名称已存在");
                         return false;
                     }
                     ParamMetadata meta;
@@ -382,7 +382,7 @@ bool MainWidget::applyFormToParam(ParamMetadata* p, QString& error)
                     TypeManager::instance().registerType(newTypeName, meta);
                     selData = newTypeName;
                 } else {
-                    error = QString::fromUtf8(u8"必须输入类型名称");
+                    error = QStringLiteral("必须输入类型名称");
                     return false;
                 }
             }
@@ -447,9 +447,9 @@ void MainWidget::updateTypeRefCombo(const QString& typeStr)
         return;
     }
     typeRefCombo->setVisible(true);
-    typeRefCombo->addItem(QString::fromUtf8(u8"<新建类型...>"), QString("NEW"));
+    typeRefCombo->addItem(QStringLiteral("<新建类型...>"), QString("NEW"));
     if (typeStr == "enum") {
-        typeRefCombo->addItem(QString::fromUtf8(u8"<本地定义>"), QString("LOCAL"));
+        typeRefCombo->addItem(QStringLiteral("<本地定义>"), QString("LOCAL"));
     }
     ParamType targetType = (typeStr == "struct" ? ParamType::STRUCT : ParamType::ENUM);
     QStringList types = TypeManager::instance().getTypeNames(targetType);
@@ -494,14 +494,14 @@ void MainWidget::onApplyFormClicked()
     ParamMetadata backupRoot = rootParam;
     QString err;
     if (!applyFormToParam(p, err)) {
-        QMessageBox::warning(this, QString::fromUtf8(u8"\u65E0\u6CD5\u5E94\u7528"), err);
+        QMessageBox::warning(this, QStringLiteral("无法应用"), err);
         return;
     }
     auto report = validateProject(rootParam);
     if (report.hasError()) {
         rootParam = backupRoot;
         showValidationReportDialog();
-        QMessageBox::warning(this, QString::fromUtf8(u8"\u5E94\u7528\u5931\u8D25"), QString::fromUtf8(u8"\u8F93\u5165\u65E0\u6548\uFF0C\u5DF2\u56DE\u6EDA"));
+        QMessageBox::warning(this, QStringLiteral("应用失败"), QStringLiteral("输入无效，已回滚"));
         rebuildTreeFromModel();
         updateValidationStatus();
         return;

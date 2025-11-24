@@ -1,10 +1,12 @@
 #include "json_io.h"
 
+#include "type_manager.h"
+
 #include <QFile>
-#include <QSaveFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
+#include <QSaveFile>
 
 static QJsonObject paramToJson(const ParamMetadata& p)
 {
@@ -52,6 +54,31 @@ static ParamMetadata jsonToParam(const QJsonObject& o)
     return p;
 }
 
+static QJsonArray serializeRegisteredTypes()
+{
+    QJsonArray arr;
+    const QStringList names = TypeManager::instance().getAllTypeNames();
+    for (const QString& name : names) {
+        const ParamMetadata* meta = TypeManager::instance().getType(name);
+        if (!meta) continue;
+        arr.append(paramToJson(*meta));
+    }
+    return arr;
+}
+
+static void restoreRegisteredTypes(const QJsonArray& arr)
+{
+    TypeManager::instance().clear();
+    for (const QJsonValue& val : arr) {
+        if (!val.isObject()) continue;
+        ParamMetadata meta = jsonToParam(val.toObject());
+        if (meta.name.isEmpty()) continue;
+        if (!TypeManager::instance().registerType(meta.name, meta)) {
+            TypeManager::instance().updateType(meta.name, meta);
+        }
+    }
+}
+
 bool SpeIO::saveProject(const QString& path, const ParamMetadata& root)
 {
     QJsonObject rootObj;
@@ -59,6 +86,7 @@ bool SpeIO::saveProject(const QString& path, const ParamMetadata& root)
     rootObj["projectName"] = root.name;
     QJsonArray params; params.append(paramToJson(root));
     rootObj["parameters"] = params;
+    rootObj["types"] = serializeRegisteredTypes();
 
     QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly)) return false;
@@ -77,6 +105,7 @@ bool SpeIO::loadProject(const QString& path, ParamMetadata& root)
     QJsonParseError err; QJsonDocument doc = QJsonDocument::fromJson(data, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) return false;
     auto obj = doc.object();
+    restoreRegisteredTypes(obj.value("types").toArray());
     auto arr = obj.value("parameters").toArray();
     if (arr.isEmpty()) return false;
     root = jsonToParam(arr.first().toObject());
@@ -130,6 +159,7 @@ bool SpeIO::saveProjectAll(const QString& path, const ParamMetadata& root, const
     rootObj["version"] = "1.0";
     rootObj["projectName"] = root.name;
     QJsonArray params; params.append(paramToJson(root)); rootObj["parameters"] = params;
+    rootObj["types"] = serializeRegisteredTypes();
     QJsonArray instArr; for (const auto& in : instances) instArr.append(instanceToJson(in)); rootObj["instances"] = instArr;
     QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly)) return false;
@@ -143,11 +173,12 @@ bool SpeIO::loadProjectAll(const QString& path, ParamMetadata& root, QVector<Ins
     auto data = f.readAll(); f.close();
     QJsonParseError err; auto doc = QJsonDocument::fromJson(data, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) return false;
-    auto obj = doc.object(); auto arr = obj.value("parameters").toArray(); if (arr.isEmpty()) return false;
+    auto obj = doc.object();
+    restoreRegisteredTypes(obj.value("types").toArray());
+    auto arr = obj.value("parameters").toArray(); if (arr.isEmpty()) return false;
     root = jsonToParam(arr.first().toObject());
     instances.clear();
     for (const auto& v : obj.value("instances").toArray()) instances.append(jsonToInstance(v.toObject()));
     return true;
 }
-
 

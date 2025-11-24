@@ -1,6 +1,7 @@
 #include "ui/main_window/main_widget.h"
 
 #include "core/json_io.h"
+#include "core/type_manager.h"
 #include "core/validation.h"
 #include "generator/cpp_generator.h"
 #include "ui/dialogs/instances_select_dialog.h"
@@ -11,6 +12,7 @@
 
 void MainWidget::buildSampleRoot()
 {
+    TypeManager::instance().clear();
     rootParam.name = "PayloadConfig";
     rootParam.type = ParamType::STRUCT;
 
@@ -20,7 +22,7 @@ void MainWidget::buildSampleRoot()
     ParamMetadata temperature;
     temperature.name = "Temperature";
     temperature.type = ParamType::UINT16;
-    temperature.unit = QString::fromUtf8(u8"\u00B0C");
+    temperature.unit = QStringLiteral("°C");
     temperature.defaultValue = 25;
     ParamMetadata humidity;
     humidity.name = "Humidity";
@@ -78,12 +80,12 @@ void MainWidget::buildSampleRoot()
 void MainWidget::onNewProjectClicked()
 {
     buildSampleRoot();
-    QMessageBox::information(this, QString::fromUtf8(u8"\u65B0\u5EFA"), QString::fromUtf8(u8"\u5DF2\u521B\u5EFA\u793A\u4F8B\u9879\u76EE\u7ED3\u6784"));
+    QMessageBox::information(this, QStringLiteral("新建"), QStringLiteral("已创建示例项目结构"));
 }
 
 void MainWidget::onOpenClicked()
 {
-    const QString path = QFileDialog::getOpenFileName(this, QString::fromUtf8(u8"\u6253\u5F00\u9879\u76EE"), lastProjectPath, "SimParamEditor (*.spe)");
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("打开项目"), lastProjectPath, "SimParamEditor (*.spe)");
     if (path.isEmpty()) return;
     ParamMetadata temp;
     QVector<InstanceMetadata> insts;
@@ -91,13 +93,13 @@ void MainWidget::onOpenClicked()
         rootParam = temp;
         instances = insts;
         lastProjectPath = path;
-        QMessageBox::information(this, QString::fromUtf8(u8"\u6253\u5F00\u9879\u76EE"), QString::fromUtf8(u8"\u52A0\u8F7D\u6210\u529F"));
+        QMessageBox::information(this, QStringLiteral("打开项目"), QStringLiteral("加载成功"));
         rebuildTreeFromModel();
         rebuildInstancesTree();
         refreshCenterCanvas();
         updateValidationStatus();
     } else {
-        QMessageBox::warning(this, QString::fromUtf8(u8"\u6253\u5F00\u9879\u76EE"), QString::fromUtf8(u8"\u52A0\u8F7D\u5931\u8D25"));
+        QMessageBox::warning(this, QStringLiteral("打开项目"), QStringLiteral("加载失败"));
     }
 }
 
@@ -105,43 +107,43 @@ void MainWidget::onSaveClicked()
 {
     QString path = lastProjectPath;
     if (path.isEmpty()) {
-        path = QFileDialog::getSaveFileName(this, QString::fromUtf8(u8"\u4FDD\u5B58\u9879\u76EE"), QDir::homePath() + "/project.spe", "SimParamEditor (*.spe)");
+        path = QFileDialog::getSaveFileName(this, QStringLiteral("保存项目"), QDir::homePath() + "/project.spe", "SimParamEditor (*.spe)");
         if (path.isEmpty()) return;
     }
     {
         auto report = validateProject(rootParam);
         if (report.hasError()) {
             showValidationReportDialog();
-            QMessageBox::warning(this, QString::fromUtf8(u8"\u4FDD\u5B58\u963B\u6B62"), QString::fromUtf8(u8"\u5B58\u5728\u9519\u8BEF\uFF0C\u8BF7\u4FEE\u590D\u540E\u518D\u4FDD\u5B58"));
+            QMessageBox::warning(this, QStringLiteral("保存阻止"), QStringLiteral("存在错误，请修复后再保存"));
             return;
         }
     }
     if (SpeIO::saveProjectAll(path, rootParam, instances)) {
         lastProjectPath = path;
-        QMessageBox::information(this, QString::fromUtf8(u8"\u4FDD\u5B58\u9879\u76EE"), QString::fromUtf8(u8"\u4FDD\u5B58\u6210\u529F"));
+        QMessageBox::information(this, QStringLiteral("保存项目"), QStringLiteral("保存成功"));
     } else {
-        QMessageBox::warning(this, QString::fromUtf8(u8"\u4FDD\u5B58\u9879\u76EE"), QString::fromUtf8(u8"\u4FDD\u5B58\u5931\u8D25"));
+        QMessageBox::warning(this, QStringLiteral("保存项目"), QStringLiteral("保存失败"));
     }
 }
 
 void MainWidget::onGenerateClicked()
 {
-    const QString out = QFileDialog::getExistingDirectory(this, QString::fromUtf8(u8"\u9009\u62E9\u8F93\u51FA\u76EE\u5F55"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
+    const QString out = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
     if (out.isEmpty()) return;
     {
         auto report = validateProject(rootParam);
         if (report.hasError()) {
             showValidationReportDialog();
-            QMessageBox::warning(this, QString::fromUtf8(u8"\u751F\u6210\u963B\u6B62"), QString::fromUtf8(u8"\u5B58\u5728\u9519\u8BEF\uFF0C\u8BF7\u4FEE\u590D\u540E\u518D\u751F\u6210"));
+            QMessageBox::warning(this, QStringLiteral("生成阻止"), QStringLiteral("存在错误，请修复后再生成"));
             return;
         }
     }
     CppGenerator gen;
     if (gen.generate(rootParam, out)) {
         lastOutputDir = out;
-        QMessageBox::information(this, QString::fromUtf8(u8"\u751F\u6210\u4EE3\u7801"), QString::fromUtf8(u8"\u751F\u6210\u6210\u529F"));
+        QMessageBox::information(this, QStringLiteral("生成代码"), QStringLiteral("生成成功"));
     } else {
-        QMessageBox::warning(this, QString::fromUtf8(u8"\u751F\u6210\u4EE3\u7801"), QString::fromUtf8(u8"\u751F\u6210\u5931\u8D25"));
+        QMessageBox::warning(this, QStringLiteral("生成代码"), QStringLiteral("生成失败"));
     }
 }
 
@@ -155,15 +157,15 @@ void MainWidget::onGenerateInstancesClicked()
     if (chosen.isEmpty()) return;
     QVector<InstanceMetadata> picked;
     for (const auto& in : instances) if (chosen.contains(in.name)) picked.push_back(in);
-    const QString out = QFileDialog::getExistingDirectory(this, QString::fromUtf8(u8"选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
+    const QString out = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
     if (out.isEmpty()) return;
     CppGenerator gen;
     bool okCode = gen.generateInstances(rootParam, picked, out);
     bool okJson = gen.generateInstancesJson(rootParam, picked, out);
     if (okCode && okJson) {
         lastOutputDir = out;
-        QMessageBox::information(this, QString::fromUtf8(u8"生成实例代码"), QString::fromUtf8(u8"生成成功（含 JSON 读写）"));
+        QMessageBox::information(this, QStringLiteral("生成实例代码"), QStringLiteral("生成成功（含 JSON 读写）"));
     } else {
-        QMessageBox::warning(this, QString::fromUtf8(u8"生成实例代码"), QString::fromUtf8(u8"生成失败"));
+        QMessageBox::warning(this, QStringLiteral("生成实例代码"), QStringLiteral("生成失败"));
     }
 }

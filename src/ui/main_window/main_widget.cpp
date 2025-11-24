@@ -82,12 +82,12 @@ QWidget* MainWidget::createTopBar()
     h->setContentsMargins(8, 6, 8, 6);
     h->setSpacing(8);
 
-    auto* btnNew = new QPushButton(QString::fromUtf8(u8"\u65B0\u5EFA"), bar);
-    auto* btnOpen = new QPushButton(QString::fromUtf8(u8"\u6253\u5F00"), bar);
-    auto* btnSave = new QPushButton(QString::fromUtf8(u8"\u4FDD\u5B58"), bar);
-    auto* btnGen = new QPushButton(QString::fromUtf8(u8"\u751F\u6210\u4EE3\u7801"), bar);
-    auto* btnGenInst = new QPushButton(QString::fromUtf8(u8"\u751F\u6210\u5B9E\u4F8B"), bar);
-    themeToggleBtn = new QPushButton(QString::fromUtf8(u8"\u2728 \u4E3B\u9898"), bar);
+    auto* btnNew = new QPushButton(QStringLiteral("新建"), bar);
+    auto* btnOpen = new QPushButton(QStringLiteral("打开"), bar);
+    auto* btnSave = new QPushButton(QStringLiteral("保存"), bar);
+    auto* btnGen = new QPushButton(QStringLiteral("生成代码"), bar);
+    auto* btnGenInst = new QPushButton(QStringLiteral("生成实例"), bar);
+    themeToggleBtn = new QPushButton(QStringLiteral("✨ 主题"), bar);
 
     btnNew->setProperty("class", "ghost");
     btnOpen->setProperty("class", "ghost");
@@ -148,7 +148,7 @@ QWidget* MainWidget::createLeftOutline()
     outlineTree->setHeaderHidden(true);
     outlineTree->setContextMenuPolicy(Qt::CustomContextMenu);
     tplLayout->addWidget(outlineTree);
-    leftTabs->addTab(tplPage, QString::fromUtf8(u8"模板"));
+    leftTabs->addTab(tplPage, QStringLiteral("模板"));
 
     QWidget* instPage = new QWidget(leftTabs);
     auto* instLayout = new QVBoxLayout(instPage);
@@ -158,7 +158,7 @@ QWidget* MainWidget::createLeftOutline()
     instancesTree->setHeaderHidden(true);
     instancesTree->setContextMenuPolicy(Qt::CustomContextMenu);
     instLayout->addWidget(instancesTree);
-    leftTabs->addTab(instPage, QString::fromUtf8(u8"实例"));
+    leftTabs->addTab(instPage, QStringLiteral("实例"));
 
     v->addWidget(leftTabs);
 
@@ -193,13 +193,13 @@ QWidget* MainWidget::createCenterCanvas()
     propertyBrowser = new QTreeWidget(centerStack);
     propertyBrowser->setColumnCount(7);
     propertyBrowser->setHeaderLabels(QStringList()
-                                     << QString::fromUtf8(u8"名称")
-                                     << QString::fromUtf8(u8"相对路径")
-                                     << QString::fromUtf8(u8"类型")
-                                     << QString::fromUtf8(u8"单位")
-                                     << QString::fromUtf8(u8"默认值")
-                                     << QString::fromUtf8(u8"引用类型")
-                                     << QString::fromUtf8(u8"校验状态"));
+                                     << QStringLiteral("名称")
+                                     << QStringLiteral("相对路径")
+                                     << QStringLiteral("类型")
+                                     << QStringLiteral("单位")
+                                     << QStringLiteral("默认值")
+                                     << QStringLiteral("引用类型")
+                                     << QStringLiteral("校验状态"));
     propertyBrowser->setSelectionMode(QAbstractItemView::SingleSelection);
     propertyBrowser->setSelectionBehavior(QAbstractItemView::SelectRows);
     propertyBrowser->setAlternatingRowColors(true);
@@ -261,7 +261,7 @@ QWidget* MainWidget::createRightPropertyPanel()
     v->setContentsMargins(16, 16, 16, 16);
     v->setSpacing(16);
 
-    auto* title = new QLabel(QString::fromUtf8(u8"属性编辑"), propertyPanel);
+    auto* title = new QLabel(QStringLiteral("属性编辑"), propertyPanel);
     title->setStyleSheet("font-size: 16px; font-weight: bold; color: #333; margin-bottom: 8px;");
     v->addWidget(title);
 
@@ -277,11 +277,14 @@ QWidget* MainWidget::createRightPropertyPanel()
                                       << "int8" << "int16" << "int32"
                                       << "float" << "double" << "char" << "char[]" << "enum" << "struct");
     formTypeCombo->setCurrentText("uint16");
+    formTypeCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    formTypeCombo->setMinimumContentsLength(10);
+    formTypeCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     connect(formTypeCombo, SIGNAL(currentTextChanged(QString)), this, SLOT(onTypeChanged(QString)));
-    formUnitEdit = new QLineEdit(QString::fromUtf8(u8"\u00B0C"), propertyPanel);
+    formUnitEdit = new QLineEdit(QStringLiteral("°C"), propertyPanel);
     formDefaultEdit = new QLineEdit("25", propertyPanel);
     formDescEdit = new QTextEdit(propertyPanel);
-    formDescEdit->setPlainText(QString::fromUtf8(u8"\u73AF\u5883\u6E29\u5EA6\u4F20\u611F\u5668\uFF0C\u6D4B\u91CF\u8303\u56F4 -40\u00B0C \u81F3 85\u00B0C\uFF0C\u7CBE\u5EA6 \u00B10.5\u00B0C"));
+    formDescEdit->setPlainText(QStringLiteral("环境温度传感器，测量范围 -40°C 至 85°C，精度 ±0.5°C"));
     enumDefaultCombo = new QComboBox(propertyPanel);
     enumDefaultCombo->setVisible(false);
     connect(enumDefaultCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(onEnumDefaultChanged(int)));
@@ -291,23 +294,23 @@ QWidget* MainWidget::createRightPropertyPanel()
     arraySizeSpin->setRange(1, 65535);
     arraySizeSpin->setVisible(false);
 
-    form->addRow(QString::fromUtf8(u8"\u53D8\u91CF\u540D\u79F0"), formNameEdit);
-    form->addRow(QString::fromUtf8(u8"\u6570\u636E\u7C7B\u578B"), formTypeCombo);
-    form->addRow(QString::fromUtf8(u8"\u5355\u4F4D"), formUnitEdit);
-    form->addRow(QString::fromUtf8(u8"\u9ED8\u8BA4\u503C"), formDefaultEdit);
-    form->addRow(QString::fromUtf8(u8"\u53D8\u91CF\u8BF4\u660E"), formDescEdit);
-    form->addRow(QString::fromUtf8(u8"\u679A\u4E3E\u9ED8\u8BA4\u503C"), enumDefaultCombo);
-    form->addRow(QString::fromUtf8(u8"\u590D\u7528\u5F15\u7528"), typeRefCombo);
-    form->addRow(QString::fromUtf8(u8"char[] \u957F\u5EA6"), arraySizeSpin);
+    form->addRow(QStringLiteral("变量名称"), formNameEdit);
+    form->addRow(QStringLiteral("数据类型"), formTypeCombo);
+    form->addRow(QStringLiteral("单位"), formUnitEdit);
+    form->addRow(QStringLiteral("默认值"), formDefaultEdit);
+    form->addRow(QStringLiteral("变量说明"), formDescEdit);
+    form->addRow(QStringLiteral("枚举默认值"), enumDefaultCombo);
+    form->addRow(QStringLiteral("复用引用"), typeRefCombo);
+    form->addRow(QStringLiteral("char[] 长度"), arraySizeSpin);
     v->addLayout(form);
 
-    enumEditorGroup = new QGroupBox(QString::fromUtf8(u8"\u679A\u4E3E\u9879"), propertyPanel);
+    enumEditorGroup = new QGroupBox(QStringLiteral("枚举项"), propertyPanel);
     auto* enumLayout = new QVBoxLayout(enumEditorGroup);
     enumTable = new QTableWidget(enumEditorGroup);
     enumTable->setColumnCount(2);
     enumTable->setHorizontalHeaderLabels(QStringList()
-                                         << QString::fromUtf8(u8"\u540D\u79F0")
-                                         << QString::fromUtf8(u8"\u6570\u503C"));
+                                         << QStringLiteral("名称")
+                                         << QStringLiteral("数值"));
     enumTable->horizontalHeader()->setStretchLastSection(true);
     enumTable->verticalHeader()->setVisible(false);
     enumTable->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -315,8 +318,8 @@ QWidget* MainWidget::createRightPropertyPanel()
     enumTable->setEditTriggers(QAbstractItemView::AllEditTriggers);
     enumLayout->addWidget(enumTable);
     auto* enumButtonsRow = new QHBoxLayout();
-    enumAddRowBtn = new QPushButton(QString::fromUtf8(u8"\u6DFB\u52A0"), enumEditorGroup);
-    enumRemoveRowBtn = new QPushButton(QString::fromUtf8(u8"\u5220\u9664"), enumEditorGroup);
+    enumAddRowBtn = new QPushButton(QStringLiteral("添加"), enumEditorGroup);
+    enumRemoveRowBtn = new QPushButton(QStringLiteral("删除"), enumEditorGroup);
     enumButtonsRow->addWidget(enumAddRowBtn);
     enumButtonsRow->addWidget(enumRemoveRowBtn);
     enumButtonsRow->addStretch(1);
@@ -336,8 +339,8 @@ QWidget* MainWidget::createRightPropertyPanel()
     auto* hb = new QHBoxLayout(btnRow);
     hb->setContentsMargins(0, 0, 0, 0);
     hb->setSpacing(8);
-    formApplyBtn = new QPushButton(QString::fromUtf8(u8"\u5E94\u7528"), btnRow);
-    formCancelBtn = new QPushButton(QString::fromUtf8(u8"\u53D6\u6D88"), btnRow);
+    formApplyBtn = new QPushButton(QStringLiteral("应用"), btnRow);
+    formCancelBtn = new QPushButton(QStringLiteral("取消"), btnRow);
     hb->addWidget(formApplyBtn);
     hb->addWidget(formCancelBtn);
     v->addWidget(btnRow);
@@ -358,8 +361,8 @@ QWidget* MainWidget::createStatusBar()
     auto* h = new QHBoxLayout(statusBarWidget);
     h->setContentsMargins(8, 2, 8, 2);
     h->setSpacing(8);
-    statusLabel = new QLabel(QString::fromUtf8(u8"\u6821\u9A8C\u72B6\u6001: -"), statusBarWidget);
-    auto* btn = new QPushButton(QString::fromUtf8(u8"\u67E5\u770B\u62A5\u544A"), statusBarWidget);
+    statusLabel = new QLabel(QStringLiteral("校验状态: -"), statusBarWidget);
+    auto* btn = new QPushButton(QStringLiteral("查看报告"), statusBarWidget);
     connect(btn, &QPushButton::clicked, this, &MainWidget::onShowValidationClicked);
     h->addWidget(statusLabel);
     h->addStretch(1);
@@ -400,8 +403,8 @@ void MainWidget::updateThemeToggleButton()
 {
     if (!themeToggleBtn) return;
     const bool isLight = ThemeManager::instance().currentTheme() == ThemeManager::ThemeVariant::Light;
-    themeToggleBtn->setText(isLight ? QString::fromUtf8(u8"\U0001F319 \u6697\u8272") : QString::fromUtf8(u8"\u2600\uFE0F \u4EAE\u8272"));
-    themeToggleBtn->setToolTip(isLight ? QString::fromUtf8(u8"\u5207\u6362\u5230\u6697\u8272\u4E3B\u9898") : QString::fromUtf8(u8"\u5207\u6362\u5230\u4EAE\u8272\u4E3B\u9898"));
+    themeToggleBtn->setText(isLight ? QStringLiteral("🌙 暗色") : QStringLiteral("☀️ 亮色"));
+    themeToggleBtn->setToolTip(isLight ? QStringLiteral("切换到暗色主题") : QStringLiteral("切换到亮色主题"));
 }
 
 void MainWidget::onThemeToggleClicked()
