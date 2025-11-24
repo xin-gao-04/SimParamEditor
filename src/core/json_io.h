@@ -2,7 +2,7 @@
 #define JSON_IO_H
 
 #include <QString>
-#include "param_types.h"
+#include "core/param_types.h"
 
 namespace SpeIO {
 
@@ -16,5 +16,4 @@ bool loadProjectAll(const QString& path, ParamMetadata& root, QVector<InstanceMe
 }
 
 #endif // JSON_IO_H
-
 

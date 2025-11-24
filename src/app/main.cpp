@@ -1,5 +1,5 @@
 #include <QApplication>
-#include "main_widget.h"
+#include "ui/main_window/main_widget.h"
 #include "ui/theme_manager.h"
 
 int main(int argc, char* argv[])
@@ -14,5 +14,4 @@ int main(int argc, char* argv[])
 
     return app.exec();
 }
-
 

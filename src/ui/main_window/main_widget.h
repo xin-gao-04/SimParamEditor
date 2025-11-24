@@ -4,7 +4,7 @@
 #include <QList>
 #include <QWidget>
 #include <QStringList>
-#include "param_types.h"
+#include "core/param_types.h"
 
 class QPushButton;
 class QFileDialog;

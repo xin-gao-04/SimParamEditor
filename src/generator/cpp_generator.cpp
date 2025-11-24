@@ -1,5 +1,5 @@
 #include "cpp_generator.h"
-#include "../type_manager.h"
+#include "core/type_manager.h"
 
 #include <QDir>
 #include <QSaveFile>
@@ -473,5 +473,4 @@ bool CppGenerator::generateStruct(const ParamMetadata& node, const QString& outD
 
     return true;
 }
-
 

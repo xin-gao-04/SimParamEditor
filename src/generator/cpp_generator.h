@@ -3,7 +3,7 @@
 
 #include <QString>
 #include <QTextStream>
-#include "../param_types.h"
+#include "core/param_types.h"
 
 // C++代码生成器
 class CppGenerator {
@@ -50,5 +50,4 @@ private:
 };
 
 #endif // CPP_GENERATOR_H
-
 

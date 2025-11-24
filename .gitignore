@@ -2,6 +2,19 @@
 build/
 cmake-build-*/
 
+# 项目配置
+.vscode/
+.idea/
+.vs/
+.vscode/
+.idea/
+.vs/
+.vscode/
+.idea/
+.vs/
+.cache/
+compile_commands.json
+
 # Visual Studio 文件
 *.vcxproj
 *.vcxproj.filters

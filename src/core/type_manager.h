@@ -1,7 +1,7 @@
 #ifndef TYPE_MANAGER_H
 #define TYPE_MANAGER_H
 
-#include "param_types.h"
+#include "core/param_types.h"
 #include <QMap>
 #include <QString>
 #include <QObject>
@@ -78,4 +78,3 @@ private:
 };
 
 #endif // TYPE_MANAGER_H
-

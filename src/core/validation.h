@@ -3,7 +3,7 @@
 
 #include <QVector>
 #include <QString>
-#include "param_types.h"
+#include "core/param_types.h"
 
 struct ValidationIssue {
     enum Level { Error, Warning } level;
@@ -22,5 +22,4 @@ struct ValidationReport {
 ValidationReport validateProject(const ParamMetadata& root);
 
 #endif // VALIDATION_H
-
 
