@@ -22,7 +22,7 @@ void MainWidget::buildSampleRoot()
     ParamMetadata temperature;
     temperature.name = "Temperature";
     temperature.type = ParamType::UINT16;
-    temperature.unit = QStringLiteral("°C");
+    temperature.unit = ("°C");
     temperature.defaultValue = 25;
     ParamMetadata humidity;
     humidity.name = "Humidity";
@@ -80,12 +80,12 @@ void MainWidget::buildSampleRoot()
 void MainWidget::onNewProjectClicked()
 {
     buildSampleRoot();
-    QMessageBox::information(this, QStringLiteral("新建"), QStringLiteral("已创建示例项目结构"));
+    QMessageBox::information(this, ("新建"), ("已创建示例项目结构"));
 }
 
 void MainWidget::onOpenClicked()
 {
-    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("打开项目"), lastProjectPath, "SimParamEditor (*.spe)");
+    const QString path = QFileDialog::getOpenFileName(this, ("打开项目"), lastProjectPath, "SimParamEditor (*.spe)");
     if (path.isEmpty()) return;
     ParamMetadata temp;
     QVector<InstanceMetadata> insts;
@@ -93,13 +93,13 @@ void MainWidget::onOpenClicked()
         rootParam = temp;
         instances = insts;
         lastProjectPath = path;
-        QMessageBox::information(this, QStringLiteral("打开项目"), QStringLiteral("加载成功"));
+        QMessageBox::information(this, ("打开项目"), ("加载成功"));
         rebuildTreeFromModel();
         rebuildInstancesTree();
         refreshCenterCanvas();
         updateValidationStatus();
     } else {
-        QMessageBox::warning(this, QStringLiteral("打开项目"), QStringLiteral("加载失败"));
+        QMessageBox::warning(this, ("打开项目"), ("加载失败"));
     }
 }
 
@@ -107,43 +107,43 @@ void MainWidget::onSaveClicked()
 {
     QString path = lastProjectPath;
     if (path.isEmpty()) {
-        path = QFileDialog::getSaveFileName(this, QStringLiteral("保存项目"), QDir::homePath() + "/project.spe", "SimParamEditor (*.spe)");
+        path = QFileDialog::getSaveFileName(this, ("保存项目"), QDir::homePath() + "/project.spe", "SimParamEditor (*.spe)");
         if (path.isEmpty()) return;
     }
     {
         auto report = validateProject(rootParam);
         if (report.hasError()) {
             showValidationReportDialog();
-            QMessageBox::warning(this, QStringLiteral("保存阻止"), QStringLiteral("存在错误，请修复后再保存"));
+            QMessageBox::warning(this, ("保存阻止"), ("存在错误，请修复后再保存"));
             return;
         }
     }
     if (SpeIO::saveProjectAll(path, rootParam, instances)) {
         lastProjectPath = path;
-        QMessageBox::information(this, QStringLiteral("保存项目"), QStringLiteral("保存成功"));
+        QMessageBox::information(this, ("保存项目"), ("保存成功"));
     } else {
-        QMessageBox::warning(this, QStringLiteral("保存项目"), QStringLiteral("保存失败"));
+        QMessageBox::warning(this, ("保存项目"), ("保存失败"));
     }
 }
 
 void MainWidget::onGenerateClicked()
 {
-    const QString out = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
+    const QString out = QFileDialog::getExistingDirectory(this, ("选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
     if (out.isEmpty()) return;
     {
         auto report = validateProject(rootParam);
         if (report.hasError()) {
             showValidationReportDialog();
-            QMessageBox::warning(this, QStringLiteral("生成阻止"), QStringLiteral("存在错误，请修复后再生成"));
+            QMessageBox::warning(this, ("生成阻止"), ("存在错误，请修复后再生成"));
             return;
         }
     }
     CppGenerator gen;
     if (gen.generate(rootParam, out)) {
         lastOutputDir = out;
-        QMessageBox::information(this, QStringLiteral("生成代码"), QStringLiteral("生成成功"));
+        QMessageBox::information(this, ("生成代码"), ("生成成功"));
     } else {
-        QMessageBox::warning(this, QStringLiteral("生成代码"), QStringLiteral("生成失败"));
+        QMessageBox::warning(this, ("生成代码"), ("生成失败"));
     }
 }
 
@@ -157,15 +157,15 @@ void MainWidget::onGenerateInstancesClicked()
     if (chosen.isEmpty()) return;
     QVector<InstanceMetadata> picked;
     for (const auto& in : instances) if (chosen.contains(in.name)) picked.push_back(in);
-    const QString out = QFileDialog::getExistingDirectory(this, QStringLiteral("选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
+    const QString out = QFileDialog::getExistingDirectory(this, ("选择输出目录"), lastOutputDir.isEmpty() ? QDir::homePath() : lastOutputDir);
     if (out.isEmpty()) return;
     CppGenerator gen;
     bool okCode = gen.generateInstances(rootParam, picked, out);
     bool okJson = gen.generateInstancesJson(rootParam, picked, out);
     if (okCode && okJson) {
         lastOutputDir = out;
-        QMessageBox::information(this, QStringLiteral("生成实例代码"), QStringLiteral("生成成功（含 JSON 读写）"));
+        QMessageBox::information(this, ("生成实例代码"), ("生成成功（含 JSON 读写）"));
     } else {
-        QMessageBox::warning(this, QStringLiteral("生成实例代码"), QStringLiteral("生成失败"));
+        QMessageBox::warning(this, ("生成实例代码"), ("生成失败"));
     }
 }

@@ -47,3 +47,7 @@ target_link_libraries(SimParamEditor PRIVATE Qt5::Widgets)
 
 target_include_directories(SimParamEditor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+if(MSVC)
+    target_compile_options(SimParamEditor PRIVATE /utf-8)
+endif()
+

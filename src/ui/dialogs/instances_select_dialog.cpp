@@ -9,7 +9,7 @@
 InstancesSelectDialog::InstancesSelectDialog(const QStringList& instanceNames, QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle(QStringLiteral("选择要生成的实例"));
+    setWindowTitle(("选择要生成的实例"));
     auto* v = new QVBoxLayout(this);
     listWidget = new QListWidget(this);
     for (const auto& name : instanceNames) {
@@ -20,8 +20,8 @@ InstancesSelectDialog::InstancesSelectDialog(const QStringList& instanceNames, Q
     v->addWidget(listWidget);
 
     auto* batchRow = new QHBoxLayout();
-    auto* allBtn = new QPushButton(QStringLiteral("全选"), this);
-    auto* noneBtn = new QPushButton(QStringLiteral("全不选"), this);
+    auto* allBtn = new QPushButton(("全选"), this);
+    auto* noneBtn = new QPushButton(("全不选"), this);
     batchRow->addWidget(allBtn);
     batchRow->addWidget(noneBtn);
     batchRow->addStretch(1);

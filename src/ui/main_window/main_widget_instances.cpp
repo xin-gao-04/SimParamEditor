@@ -108,7 +108,7 @@ QWidget* MainWidget::renderInstanceEditor(const InstanceMetadata& instConst, con
     QWidget* panel = new QWidget;
     auto* v = new QVBoxLayout(panel);
     v->setContentsMargins(12, 12, 12, 12);
-    QLabel* head = new QLabel(QStringLiteral("编辑实例: ") + inst->name + "  (" + inst->typePath + ")", panel);
+    QLabel* head = new QLabel(("编辑实例: ") + inst->name + "  (" + inst->typePath + ")", panel);
     v->addWidget(head);
     renderFieldsRecursive(v, typeNode, *inst, QStringList(), this);
     v->addStretch(1);
@@ -187,7 +187,7 @@ bool MainWidget::editInstanceValues(InstanceMetadata& inst)
     for (const auto& f : leafs) {
         const QString cur = inst.values.value(f).toString();
         bool ok = false;
-        QString v = QInputDialog::getText(this, QStringLiteral("编辑实例值"), f + QStringLiteral(" 的值"), QLineEdit::Normal, cur, &ok);
+        QString v = QInputDialog::getText(this, ("编辑实例值"), f + (" 的值"), QLineEdit::Normal, cur, &ok);
         if (!ok) continue;
         inst.values[f] = v;
     }
@@ -198,7 +198,7 @@ void MainWidget::rebuildInstancesTree()
 {
     if (!instancesTree) return;
     instancesTree->clear();
-    QTreeWidgetItem* rootItem = new QTreeWidgetItem(instancesTree, QStringList() << QStringLiteral("实例"));
+    QTreeWidgetItem* rootItem = new QTreeWidgetItem(instancesTree, QStringList() << ("实例"));
     for (const auto& inst : instances) {
         QTreeWidgetItem* item = new QTreeWidgetItem(rootItem, QStringList() << inst.name);
         item->setData(0, Qt::UserRole, inst.typePath);
@@ -210,13 +210,13 @@ void MainWidget::onInstancesContextMenuRequested(const QPoint& pos)
 {
     QTreeWidgetItem* item = instancesTree->itemAt(pos);
     QMenu menu(this);
-    QAction* actAdd = menu.addAction(QStringLiteral("新建实例"));
-    QAction* actEdit = menu.addAction(QStringLiteral("编辑值"));
+    QAction* actAdd = menu.addAction(("新建实例"));
+    QAction* actEdit = menu.addAction(("编辑值"));
     QAction* actRename = nullptr;
     QAction* actDelete = nullptr;
     if (item) {
-        actRename = menu.addAction(QStringLiteral("重命名"));
-        actDelete = menu.addAction(QStringLiteral("删除"));
+        actRename = menu.addAction(("重命名"));
+        actDelete = menu.addAction(("删除"));
     }
     QAction* chosen = menu.exec(instancesTree->viewport()->mapToGlobal(pos));
     if (!chosen) return;
@@ -225,10 +225,10 @@ void MainWidget::onInstancesContextMenuRequested(const QPoint& pos)
         QStringList types;
         for (const auto& c : rootParam.children) if (c.type == ParamType::STRUCT) types << c.name;
         bool ok = false;
-        QString typeName = QInputDialog::getItem(this, QStringLiteral("选择类型"), QStringLiteral("从模板选择结构体"), types, 0, false, &ok);
+        QString typeName = QInputDialog::getItem(this, ("选择类型"), ("从模板选择结构体"), types, 0, false, &ok);
         if (!ok || typeName.isEmpty()) return;
         bool ok2 = false;
-        QString instName = QInputDialog::getText(this, QStringLiteral("新建实例"), QStringLiteral("实例名称"), QLineEdit::Normal, "NewInstance", &ok2);
+        QString instName = QInputDialog::getText(this, ("新建实例"), ("实例名称"), QLineEdit::Normal, "NewInstance", &ok2);
         if (!ok2 || instName.isEmpty()) return;
         InstanceMetadata in;
         in.name = instName;
@@ -246,12 +246,12 @@ void MainWidget::onInstancesContextMenuRequested(const QPoint& pos)
         rebuildInstancesTree();
     } else if (actRename && chosen == actRename) {
         bool ok = false;
-        QString newName = QInputDialog::getText(this, QStringLiteral("重命名"), QStringLiteral("新名称"), QLineEdit::Normal, item->text(0), &ok);
+        QString newName = QInputDialog::getText(this, ("重命名"), ("新名称"), QLineEdit::Normal, item->text(0), &ok);
         if (!ok || newName.isEmpty()) return;
         for (auto& in : instances) if (in.name == item->text(0)) { in.name = newName; break; }
         rebuildInstancesTree();
     } else if (actDelete && chosen == actDelete) {
-        auto ret = QMessageBox::question(this, QStringLiteral("确认删除"), QStringLiteral("确定删除该实例吗？"));
+        auto ret = QMessageBox::question(this, ("确认删除"), ("确定删除该实例吗？"));
         if (ret != QMessageBox::Yes) return;
         for (int i = 0; i < instances.size(); ++i) if (instances[i].name == item->text(0)) { instances.remove(i); break; }
         rebuildInstancesTree();

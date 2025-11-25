@@ -127,11 +127,11 @@ void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
     if (!item) return;
     const QString path = item->data(0, Qt::UserRole).toString();
     QMenu menu(this);
-    QAction* actAddField  = menu.addAction(QStringLiteral("添加字段"));
-    QAction* actRename    = menu.addAction(QStringLiteral("重命名"));
-    QAction* actMoveUp    = menu.addAction(QStringLiteral("上移"));
-    QAction* actMoveDown  = menu.addAction(QStringLiteral("下移"));
-    QAction* actDelete    = menu.addAction(QStringLiteral("删除"));
+    QAction* actAddField  = menu.addAction(("添加字段"));
+    QAction* actRename    = menu.addAction(("重命名"));
+    QAction* actMoveUp    = menu.addAction(("上移"));
+    QAction* actMoveDown  = menu.addAction(("下移"));
+    QAction* actDelete    = menu.addAction(("删除"));
     QAction* chosen = menu.exec(outlineTree->viewport()->mapToGlobal(pos));
     if (!chosen) return;
 
@@ -140,7 +140,7 @@ void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
 
     if (chosen == actAddField) {
         if (!canHaveChildren(p->type)) {
-            QMessageBox::warning(this, QStringLiteral("操作无效"), QStringLiteral("该类型不能添加子项"));
+            QMessageBox::warning(this, ("操作无效"), ("该类型不能添加子项"));
             return;
         }
         ParamMetadata child;
@@ -152,7 +152,7 @@ void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
         refreshCenterCanvas();
     } else if (chosen == actRename) {
         bool ok = false;
-        QString newName = QInputDialog::getText(this, QStringLiteral("重命名"), QStringLiteral("输入新名称"), QLineEdit::Normal, p->name, &ok);
+        QString newName = QInputDialog::getText(this, ("重命名"), ("输入新名称"), QLineEdit::Normal, p->name, &ok);
         if (ok && !newName.isEmpty()) {
             QStringList parts = path.split('/', QString::SkipEmptyParts);
             parts.last() = newName;
@@ -183,7 +183,7 @@ void MainWidget::onOutlineContextMenuRequested(const QPoint& pos)
         updateValidationStatus();
         refreshCenterCanvas();
     } else if (chosen == actDelete) {
-        auto ret = QMessageBox::question(this, QStringLiteral("确认删除"), QStringLiteral("确定删除该项吗？"));
+        auto ret = QMessageBox::question(this, ("确认删除"), ("确定删除该项吗？"));
         if (ret != QMessageBox::Yes) return;
         ParamMetadata* parent = nullptr;
         int idx = -1;
@@ -224,7 +224,7 @@ void MainWidget::onDeleteSelected()
     auto items = outlineTree->selectedItems();
     if (items.isEmpty()) return;
     const QString path = items.first()->data(0, Qt::UserRole).toString();
-    auto ret = QMessageBox::question(this, QStringLiteral("确认删除"), QStringLiteral("确定删除该项吗？"));
+    auto ret = QMessageBox::question(this, ("确认删除"), ("确定删除该项吗？"));
     if (ret != QMessageBox::Yes) return;
     ParamMetadata* parent = nullptr;
     int idx = -1;
@@ -244,7 +244,7 @@ void MainWidget::onRenameSelected()
     ParamMetadata* p = nullptr;
     if (!getParamByPath(path, p)) return;
     bool ok = false;
-    QString newName = QInputDialog::getText(this, QStringLiteral("重命名"), QStringLiteral("输入新名称"), QLineEdit::Normal, p->name, &ok);
+    QString newName = QInputDialog::getText(this, ("重命名"), ("输入新名称"), QLineEdit::Normal, p->name, &ok);
     if (ok && !newName.isEmpty()) {
         QStringList parts = path.split('/', QString::SkipEmptyParts);
         parts.last() = newName;
